@@ -158,7 +158,7 @@ def test_fitreports_init_values(fitresult):
     indx_amplitude = [i for i, val in enumerate(report_split) if
                       'amplitude:' in val][0]
     for indx, init_val in zip([indx_center, indx_amplitude], [5, 50]):
-        assert '(init = {})'.format(init_val) in report_split[indx]
+        assert f'(init = {init_val})' in report_split[indx]
 
 
 def test_fitreports_min_correl(fitresult):
@@ -223,8 +223,8 @@ def test_report_fit(fitresult, capsys):
 
 
 def test_report_errors_deprecated(fitresult):
-    """Verify that a DeprecationWarning is shown when calling report_errors."""
-    with pytest.deprecated_call():
+    """Verify that a FutureWarning is shown when calling report_errors."""
+    with pytest.warns(FutureWarning):
         report_errors(params=fitresult.params)
 
 
@@ -374,8 +374,8 @@ def test_ci_report_with_offset(confidence_interval):
 
 @pytest.mark.parametrize("ndigits", [3, 5, 7])
 def test_ci_report_with_ndigits(confidence_interval, ndigits):
-    """Verify output of CI report when specifiying ndigits."""
+    """Verify output of CI report when specifying ndigits."""
     report_split = ci_report(confidence_interval, ndigits=ndigits).split('\n')
-    period_values = [val for val in report_split[2].split()[2:]]
+    period_values = list(report_split[2].split()[2:])
     length = [len(val.split('.')[-1]) for val in period_values]
     assert np.all(np.equal(length, ndigits))

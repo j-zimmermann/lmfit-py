@@ -2,25 +2,32 @@ import unittest
 
 import numpy as np
 from numpy import pi
-from numpy.testing import (assert_, assert_allclose, assert_almost_equal,
-                           assert_equal, dec)
+from numpy.testing import (assert_allclose, assert_almost_equal, assert_equal,
+                           dec)
 import pytest
+from scipy.optimize import rosen_der
 from uncertainties import ufloat
 
 from lmfit import Minimizer, Parameters, minimize
 from lmfit.lineshapes import gaussian
 from lmfit.minimizer import (HAS_EMCEE, SCALAR_METHODS, MinimizerResult,
-                             _lnpost, _nan_policy)
+                             _nan_policy)
+
+try:
+    import numdifftools  # noqa: F401
+    HAS_NUMDIFFTOOLS = True
+except ImportError:
+    HAS_NUMDIFFTOOLS = False
 
 
 def check(para, real_val, sig=3):
     err = abs(para.value - real_val)
-    assert(err < sig * para.stderr)
+    assert err < sig * para.stderr
 
 
 def check_wo_stderr(para, real_val, sig=0.1):
     err = abs(para.value - real_val)
-    assert(err < sig)
+    assert err < sig
 
 
 def check_paras(para_fit, para_real, sig=3):
@@ -79,7 +86,7 @@ def test_lbfgsb():
         model = amp * np.sin(shift + x / per) * np.exp(-x * x * decay * decay)
         if data is None:
             return model
-        return (model - data)
+        return model - data
 
     n = 2500
     xmin = 0.
@@ -150,7 +157,7 @@ def test_peakfit():
         model = g1 + g2
         if data is None:
             return model
-        return (model - data)
+        return model - data
 
     n = 601
     xmin = 0.
@@ -219,18 +226,15 @@ def test_scalar_minimize_has_no_uncertainties():
 
     mini = Minimizer(fcn2min, params, fcn_args=(x, data))
     out = mini.minimize()
-    assert_(np.isfinite(out.params['amp'].stderr))
+    assert np.isfinite(out.params['amp'].stderr)
     assert out.errorbars
     out2 = mini.minimize(method='nelder-mead')
-    assert_(out2.params['amp'].stderr is None)
-    assert_(out2.params['decay'].stderr is None)
-    assert_(out2.params['shift'].stderr is None)
-    assert_(out2.params['omega'].stderr is None)
-    assert_(out2.params['amp'].correl is None)
-    assert_(out2.params['decay'].correl is None)
-    assert_(out2.params['shift'].correl is None)
-    assert_(out2.params['omega'].correl is None)
-    assert not out2.errorbars
+
+    for par in ('amp', 'decay', 'shift', 'omega'):
+        assert HAS_NUMDIFFTOOLS == (out2.params[par].stderr is not None)
+        assert HAS_NUMDIFFTOOLS == (out2.params[par].correl is not None)
+
+    assert HAS_NUMDIFFTOOLS == out2.errorbars
 
 
 def test_scalar_minimize_reduce_fcn():
@@ -282,7 +286,7 @@ def test_multidimensional_fit_GH205():
                                           np.cos(yv * lambda2))
 
     data = f(xv, yv, 0.3, 3)
-    assert_(data.ndim, 2)
+    assert data.ndim, 2
 
     def fcn2min(params, xv, yv, data):
         """model decaying sine wave, subtract data"""
@@ -340,7 +344,6 @@ class CommonMinimizerTest(unittest.TestCase):
         fit_params.add('shift', value=.10, min=0.0, max=0.2)
         fit_params.add('decay', value=6.e-3, min=0, max=0.1)
         self.fit_params = fit_params
-
         self.mini = Minimizer(self.residual, fit_params, [self.x, self.data])
 
     def residual(self, pars, x, data=None):
@@ -366,7 +369,7 @@ class CommonMinimizerTest(unittest.TestCase):
 
         # but only if a parameter is not fixed
         self.fit_params['decay'].vary = False
-        self.mini.scalar_minimize(method='differential_evolution', maxiter=1)
+        self.mini.scalar_minimize(method='differential_evolution', max_nfev=1)
 
     def test_scalar_minimizers(self):
         # test all the scalar minimizers
@@ -415,12 +418,12 @@ class CommonMinimizerTest(unittest.TestCase):
     def test_nan_policy_function(self):
         a = np.array([0, 1, 2, 3, np.nan])
         pytest.raises(ValueError, _nan_policy, a)
-        assert_(np.isnan(_nan_policy(a, nan_policy='propagate')[-1]))
+        assert np.isnan(_nan_policy(a, nan_policy='propagate')[-1])
         assert_equal(_nan_policy(a, nan_policy='omit'), [0, 1, 2, 3])
 
         a[-1] = np.inf
         pytest.raises(ValueError, _nan_policy, a)
-        assert_(np.isposinf(_nan_policy(a, nan_policy='propagate')[-1]))
+        assert np.isposinf(_nan_policy(a, nan_policy='propagate')[-1])
         assert_equal(_nan_policy(a, nan_policy='omit'), [0, 1, 2, 3])
         assert_equal(_nan_policy(a, handle_inf=False), a)
 
@@ -440,40 +443,29 @@ class CommonMinimizerTest(unittest.TestCase):
         # test with emcee as method keyword argument
         if not HAS_EMCEE:
             return True
-
         np.random.seed(123456)
-        out = self.mini.minimize(method='emcee', nwalkers=100, steps=200,
+        out = self.mini.minimize(method='emcee',
+                                 nwalkers=50, steps=200,
                                  burn=50, thin=10)
         assert out.method == 'emcee'
-        assert out.nfev == 100*200
+        assert out.nfev == 50*200
 
         check_paras(out.params, self.p_true, sig=3)
 
-        out_unweighted = self.mini.minimize(method='emcee', is_weighted=False)
+        out_unweighted = self.mini.minimize(method='emcee',
+                                            nwalkers=50, steps=200,
+                                            burn=50, thin=10,
+                                            is_weighted=False)
         assert out_unweighted.method == 'emcee'
-
-    @dec.slow
-    def test_emcee_PT(self):
-        # test emcee with parallel tempering
-        if not HAS_EMCEE:
-            return True
-
-        np.random.seed(123456)
-        self.mini.userfcn = residual_for_multiprocessing
-        out = self.mini.emcee(ntemps=4, nwalkers=50, steps=200,
-                              burn=100, thin=10, workers=2)
-
-        check_paras(out.params, self.p_true, sig=3)
 
     @dec.slow
     def test_emcee_multiprocessing(self):
         # test multiprocessing runs
+        raise pytest.skip("Pytest fails with multiprocessing")
+        pytest.importorskip("dill")
         if not HAS_EMCEE:
             return True
-
-        np.random.seed(123456)
-        self.mini.userfcn = residual_for_multiprocessing
-        self.mini.emcee(steps=10, workers=4)
+        self.mini.emcee(steps=50, workers=4, nwalkers=20)
 
     def test_emcee_bounds_length(self):
         # the log-probability functions check if the parameters are
@@ -510,30 +502,29 @@ class CommonMinimizerTest(unittest.TestCase):
         out = self.mini.emcee(nwalkers=100, steps=5)
         # can initialise with a chain
         self.mini.emcee(nwalkers=100, steps=1, pos=out.chain)
-
         # can initialise with a correct subset of a chain
-        self.mini.emcee(nwalkers=100, steps=1, pos=out.chain[..., -1, :])
+        self.mini.emcee(nwalkers=100, steps=1, pos=out.chain[-1, ...])
 
         # but you can't initialise if the shape is wrong.
         pytest.raises(ValueError,
                       self.mini.emcee,
                       nwalkers=100,
                       steps=1,
-                      pos=out.chain[..., -1, :-1])
+                      pos=out.chain[-1, :-1, ...])
 
     def test_emcee_reuse_sampler(self):
         if not HAS_EMCEE:
             return True
 
-        self.mini.emcee(nwalkers=100, steps=5)
+        self.mini.emcee(nwalkers=20, steps=25)
 
         # if you've run the sampler the Minimizer object should have a _lastpos
         # attribute
-        assert_(hasattr(self.mini, '_lastpos'))
+        assert hasattr(self.mini, '_lastpos')
 
         # now try and re-use sampler
         out2 = self.mini.emcee(steps=10, reuse_sampler=True)
-        assert_(out2.chain.shape[1] == 15)
+        assert out2.chain.shape == (35, 20, 4)
 
         # you shouldn't be able to reuse the sampler if nvarys has changed.
         self.mini.params['amp'].vary = False
@@ -560,12 +551,10 @@ class CommonMinimizerTest(unittest.TestCase):
         # calculate the log-likelihood value
         bounds = np.array([(par.min, par.max)
                            for par in result.params.values()])
-        val2 = _lnpost(fvars,
-                       self.residual,
-                       result.params,
-                       result.var_names,
-                       bounds,
-                       userargs=(self.x, self.data))
+
+        val2 = self.mini._lnprob(fvars, self.residual, result.params,
+                                 result.var_names, bounds,
+                                 userargs=(self.x, self.data))
 
         assert_almost_equal(-0.5 * val, val2)
 
@@ -578,47 +567,23 @@ class CommonMinimizerTest(unittest.TestCase):
         except ImportError:
             return True
         out = self.mini.emcee(nwalkers=10, steps=20, burn=5, thin=2)
-        assert_(isinstance(out, MinimizerResult))
-        assert_(isinstance(out.flatchain, DataFrame))
+        assert isinstance(out, MinimizerResult)
+        assert isinstance(out.flatchain, DataFrame)
 
         # check that we can access the chains via parameter name
-        assert_(out.flatchain['amp'].shape[0] == 80)
+        # print( out.flatchain['amp'].shape[0],  200)
+        assert out.flatchain['amp'].shape[0] == 70
         assert out.errorbars
-        assert_(np.isfinite(out.params['amp'].correl['period']))
+        assert np.isfinite(out.params['amp'].correl['period'])
 
         # the lnprob array should be the same as the chain size
-        assert_(np.size(out.chain)//out.nvarys == np.size(out.lnprob))
+        assert np.size(out.chain)//out.nvarys == np.size(out.lnprob)
 
         # test chain output shapes
-        assert_(out.lnprob.shape == (10, (20-5+1)/2))
-        assert_(out.chain.shape == (10, (20-5+1)/2, out.nvarys))
-        assert_(out.flatchain.shape == (10*(20-5+1)/2, out.nvarys))
-
-    def test_emcee_PT_output(self):
-        # test mcmc output when using parallel tempering
-        if not HAS_EMCEE:
-            return True
-        try:
-            from pandas import DataFrame
-        except ImportError:
-            return True
-        out = self.mini.emcee(ntemps=6, nwalkers=10, steps=20, burn=5, thin=2)
-        assert_(isinstance(out, MinimizerResult))
-        assert_(isinstance(out.flatchain, DataFrame))
-
-        # check that we can access the chains via parameter name
-        assert_(out.flatchain['amp'].shape[0] == 80)
-        assert out.errorbars
-        assert_(np.isfinite(out.params['amp'].correl['period']))
-
-        # the lnprob array should be the same as the chain size
-        assert_(np.size(out.chain)//out.nvarys == np.size(out.lnprob))
-
-        # test chain output shapes
-        assert_(out.lnprob.shape == (6, 10, (20-5+1)/2))
-        assert_(out.chain.shape == (6, 10, (20-5+1)/2, out.nvarys))
-        # Only the 0th temperature is returned
-        assert_(out.flatchain.shape == (10*(20-5+1)/2, out.nvarys))
+        print(out.lnprob.shape, out.chain.shape, out.flatchain.shape)
+        assert out.lnprob.shape == (7, 10)
+        assert out.chain.shape == (7, 10, 4)
+        assert out.flatchain.shape == (70, 4)
 
     @dec.slow
     def test_emcee_float(self):
@@ -659,6 +624,40 @@ class CommonMinimizerTest(unittest.TestCase):
 
         assert_almost_equal(out.chain, out2.chain)
 
+    def test_emcee_ntemps(self):
+        # check for DeprecationWarning when using ntemps > 1
+        if not HAS_EMCEE:
+            return True
+
+        with pytest.raises(DeprecationWarning):
+            _ = self.mini.emcee(params=self.fit_params, ntemps=5)
+
+    def test_emcee_custom_pool(self):
+        # tests use of a custom pool
+
+        if not HAS_EMCEE:
+            return True
+
+        global emcee_counter
+        emcee_counter = 0
+
+        class my_pool:
+            def map(self, f, arg):
+                global emcee_counter
+                emcee_counter += 1
+                return map(f, arg)
+
+        def cost_fun(params, **kwargs):
+            return rosen_der([params['a'], params['b']])
+
+        params = Parameters()
+        params.add('a', 1, min=-5, max=5, vary=True)
+        params.add('b', 1, min=-5, max=5, vary=True)
+
+        fitter = Minimizer(cost_fun, params)
+        fitter.emcee(workers=my_pool(), steps=1000, nwalkers=100)
+        assert emcee_counter > 500
+
 
 def residual_for_multiprocessing(pars, x, data=None):
     # a residual function defined in the top level is needed for
@@ -673,4 +672,4 @@ def residual_for_multiprocessing(pars, x, data=None):
     model = amp*np.sin(shift + x/per) * np.exp(-x*x*decay*decay)
     if data is None:
         return model
-    return (model - data)
+    return model - data

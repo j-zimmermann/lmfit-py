@@ -1,7 +1,7 @@
 import numpy as np
+from numpy.testing import assert_allclose
 
 from lmfit import Parameters, minimize
-from lmfit_testutils import assert_paramval
 
 
 def test_basic():
@@ -31,9 +31,9 @@ def test_basic():
     # do fit, here with leastsq model
     result = minimize(fcn2min, params, args=(x, data))
 
-    assert(result.nfev > 5)
-    assert(result.nfev < 500)
-    assert(result.chisqr > 1)
-    assert(result.nvarys == 4)
-    assert_paramval(result.params['amp'], 5.03, tol=0.05)
-    assert_paramval(result.params['omega'], 2.0, tol=0.05)
+    assert result.nfev > 5
+    assert result.nfev < 500
+    assert result.chisqr > 1
+    assert result.nvarys == 4
+    assert_allclose(result.params['amp'], 5.03, rtol=0.05)
+    assert_allclose(result.params['omega'], 2.0, rtol=0.05)

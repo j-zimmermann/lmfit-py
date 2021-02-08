@@ -1,18 +1,18 @@
-asteval>=0.9.12
+-r requirements.txt
+cairosvg
 codecov
 corner
 coverage
 dill
-emcee<3.0.0
-jupyter_sphinx
+emcee>=3.0.0
+jupyter_sphinx>=0.2.4
 matplotlib
 numdifftools
-numpy>=1.16
 pandas
+Pillow
 pre-commit
 pytest
-scipy>=1.2
-six>=1.11
 Sphinx
-sphinx-gallery
-uncertainties>=3.0.1
+sphinx-gallery>=0.8
+sphinxcontrib-svg2pdfconverter
+sympy

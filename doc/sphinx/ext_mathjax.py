@@ -1,4 +1,4 @@
-# sphinx extensions for mathjax
+# Sphinx extensions for generating HTML output
 
 extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.extlinks',
@@ -7,5 +7,5 @@ extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.napoleon',
               'sphinx.ext.todo',
               'IPython.sphinxext.ipython_console_highlighting',
-              'jupyter_sphinx.execute',
+              'jupyter_sphinx',
               'sphinx_gallery.gen_gallery']

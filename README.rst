@@ -1,8 +1,8 @@
 LMfit-py
 ========
 
-.. image:: https://travis-ci.org/lmfit/lmfit-py.svg
-   :target: https://travis-ci.org/lmfit/lmfit-py
+.. image:: https://dev.azure.com/lmfit/lmfit-py/_apis/build/status/lmfit.lmfit-py?branchName=master
+    :target: https://dev.azure.com/lmfit/lmfit-py/_build/latest?definitionId=1&branchName=master
 
 .. image:: https://codecov.io/gh/lmfit/lmfit-py/branch/master/graph/badge.svg
   :target: https://codecov.io/gh/lmfit/lmfit-py
@@ -12,6 +12,9 @@ LMfit-py
 
 .. image:: https://img.shields.io/pypi/dm/lmfit.svg
    :target: https://pypi.org/project/lmfit
+
+.. image:: https://img.shields.io/badge/docs-read-brightgreen
+   :target: https://lmfit.github.io/lmfit-py/
 
 .. image:: https://zenodo.org/badge/4185/lmfit/lmfit-py.svg
    :target: https://zenodo.org/badge/latestdoi/4185/lmfit/lmfit-py

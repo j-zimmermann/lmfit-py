@@ -11,59 +11,64 @@ Process the examples in the documentation for inclusion in the Gallery:
 - copy the data files
 
 """
+
 import os
-import time
-basedir = os.getcwd()
+from pathlib import Path
+import shlex
+from shutil import copy2
+import subprocess
 
-examples_dir = os.path.abspath(os.path.join(basedir, '..', 'examples'))
-files = [fn for fn in os.listdir(examples_dir) if fn.startswith('doc_')]
 
-examples_documentation_dir = os.path.join(examples_dir, 'documentation')
-os.makedirs(examples_documentation_dir, exist_ok=True)
+def copy_data_files(src_dir, dest_dir):
+    """Copy files with datafile extension from src_dir to dest_dir."""
+    data_file_extension = [".dat", ".csv", ".sav"]
+
+    for file in src_dir.glob("*"):
+        if file.suffix in data_file_extension:
+            copy2(file, dest_dir)
+
+
+doc_dir = Path(__file__).parent.absolute()
+
+examples_dir = doc_dir.parent / "examples"
+files = examples_dir.glob("doc[_]*.py")
+
+examples_documentation_dir = examples_dir / "documentation"
+examples_documentation_dir.mkdir(exist_ok=True)
 
 
 scripts_to_run = []
 
-with open(os.path.join(examples_documentation_dir, 'README.txt'), 'w') as out:
-    out.write("Examples from the documentation\n")
-    out.write("===============================\n\n")
-    out.write("Below are all the examples that are part of the lmfit documentation.")
+(examples_documentation_dir / "README.txt").write_text(
+    "Examples from the documentation\n"
+    "===============================\n\n"
+    "Below are all the examples that are part of the lmfit documentation."
+)
 
 for fn in files:
-    inp_path = os.path.join(examples_dir, fn)
-    with open(inp_path, 'r') as inp:
-        script_text = inp.read()
 
-    gallery_file = os.path.join(examples_documentation_dir, fn[4:])
-    with open(gallery_file, 'w') as out:
-        msg = ""
-        if 'model_loadmodel.py' in fn:
-            msg = ('.. note:: This example *does* actually work, but running from within '
-                   ' sphinx-gallery fails to find symbols saved in the save file.')
-        out.write('"""\n{}\n{}\n\n{}\n"""\n'.format(fn, "="*len(fn), msg))
-        out.write('##\nimport warnings\nwarnings.filterwarnings("ignore")\n##\n')
-        out.write(script_text)
+    script_text = fn.read_text()
+
+    gallery_file = examples_documentation_dir / fn.name[4:]
+    msg = ""  # add optional message f
+    gallery_file.write_text(
+        '"""\n{}\n{}\n\n{}\n"""\n{}'.format(
+            fn.name, "=" * len(fn.name), msg, script_text
+        )
+    )
 
     # make sure the saved Models and ModelResult are available
-    if 'save' in fn:
-        scripts_to_run.append(fn[4:])
+    if "save" in fn.name:
+        scripts_to_run.append(gallery_file)
 
-time.sleep(1.0)
-
-os.system('cp {}/*.dat {}'.format(examples_dir, examples_documentation_dir))
-os.system('cp {}/*.csv {}'.format(examples_dir, examples_documentation_dir))
-os.system('cp {}/*.sav {}'.format(examples_dir, examples_documentation_dir))
-#
+copy_data_files(examples_dir, examples_documentation_dir)
 
 os.chdir(examples_documentation_dir)
 
 for script in scripts_to_run:
-    os.system('python {}'.format(script))
+    subprocess.run(shlex.split(f"python {script.as_posix()}"), check=True)
 
-os.chdir(basedir)
+os.chdir(doc_dir)
 
-time.sleep(1.0)
-# data files for the other Gallery examples
-os.system('cp {}/*.dat .'.format(examples_documentation_dir))
-os.system('cp {}/*.csv .'.format(examples_documentation_dir))
-os.system('cp {}/*.sav .'.format(examples_documentation_dir))
+# # data files for the other Gallery examples
+copy_data_files(examples_documentation_dir, doc_dir)

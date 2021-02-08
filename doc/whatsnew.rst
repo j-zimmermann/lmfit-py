@@ -1,20 +1,149 @@
 .. _whatsnew_chapter:
 
-=====================
+=============
 Release Notes
-=====================
+=============
 
-.. _lmfit GitHub repository:   https://github.com/lmfit/lmfit-py
+.. _lmfit GitHub repository: https://github.com/lmfit/lmfit-py
 
 This section discusses changes between versions, especially changes
-significant to the use and behavior of the library.  This is not meant
-to be a comprehensive list of changes.  For such a complete record,
+significant to the use and behavior of the library. This is not meant
+to be a comprehensive list of changes. For such a complete record,
 consult the `lmfit GitHub repository`_.
+
+
+.. _whatsnew_102_label:
+
+Version 1.0.2 Release Notes
+===========================
+
+Version 1.0.2 officially supports Python 3.9 and has dropped support for Python 3.5. The minimum version
+of the following dependencies were updated: asteval>=0.9.21, numpy>=1.18, and scipy>=1.3.
+
+New features:
+
+- added two-dimensional Gaussian lineshape and model (PR #642; @mpmdean)
+- all built-in models are now registered in ``lmfit.models.lmfit_models``; new Model class attribute ``valid_forms`` (PR #663; @rayosborn)
+- added a SineModel (PR #676; @lneuhaus)
+- add the ``run_mcmc_kwargs argument`` to ``Minimizer.emcee`` to pass to the ``emcee.EnsembleSampler.run_mcmc`` function (PR #694; @rbnvrw)
+
+Bug fixes:
+
+- ``ModelResult.eval_uncertainty`` should use provided Parameters (PR #646)
+- center in lognormal model can be negative (Issue #644, PR #645; @YoshieraHuang)
+- restore best-fit values after calculation of covariance matrix (Issue #655, PR #657)
+- add helper-function ``not_zero`` to prevent ZeroDivisionError in lineshapes and use in exponential lineshape (Issue #631, PR #664; @s-weigand)
+- save ``last_internal_values`` and use to restore internal values if fit is aborted (PR #667)
+- dumping a fit using the ``lbfgsb`` method now works, convert bytes to string if needed (Issue #677, PR #678; @leonfoks)
+- fix use of callable Jacobian for scalar methods (PR #681; @mstimberg)
+- preserve float/int types when encoding for JSON (PR #696; @jedzill4)
+- better support for saving/loading of ExpressionModels and assure that ``init_params`` and ``init_fit`` are set when loading a ``ModelResult`` (PR #706)
+
+Various:
+
+- update minimum dependencies (PRs #688, #693)
+- improvements in coding style, docstrings, CI, and test coverage (PRs #647, #649, #650, #653, #654; #685, #668, #689)
+- fix typo in Oscillator (PR #658; @flothesof)
+- add example using SymPy (PR #662)
+- allow better custom pool for emcee() (Issue #666, PR #667)
+- update NIST Strd reference functions and tests (PR #670)
+- make building of documentation cross-platform (PR #673; @s-weigand)
+- relax module name check in ``test_check_ast_errors`` for Python 3.9 (Issue #674, PR #675; @mwhudson)
+- fix/update layout of documentation, now uses the sphinx13 theme (PR #687)
+- fixed DeprecationWarnings reported by NumPy v1.2.0 (PR #699)
+- increase value of ``tiny`` and check for it in bounded parameters to avoid "parameter not moving from initial value" (Issue #700, PR #701)
+- add ``max_nfev`` to ``basinhopping`` and ``brute`` (now supported everywhere in lmfit) and set to more uniform default values (PR #701)
+- use Azure Pipelines for CI, drop Travis (PRs #696 and #702)
+
+
+.. _whatsnew_101_label:
+
+Version 1.0.1 Release Notes
+============================
+
+**Version 1.0.1 is the last release that supports Python 3.5**. All newer version will
+require 3.6+ so that we can use formatting-strings and rely on dictionaries being ordered.
+
+New features:
+
+- added thermal distribution model and lineshape (PR #620; @mpmdean)
+- introduced a new argument ``max_nfev`` to uniformly specify the maximum number of function evalutions (PR #610)
+  **Please note: all other arguments (e.g., ``maxfev``, ``maxiter``, ...) will no longer be passed to the underlying
+  solver. A warning will be emitted stating that one should use ``max_nfev``.**
+- the attribute ``call_kws`` was added to the ``MinimizerResult`` class and contains the keyword arguments that are
+  supplied to the solver in SciPy.
+
+Bug fixes:
+
+- fixes to the ``load`` and ``__setstate__`` methods of the Parameter class
+- fixed failure of ModelResult.dump() due to missing attributes (Issue #611, PR #623; @mpmdean)
+- ``guess_from_peak`` function now also works correctly with decreasing x-values or when using
+  pandas (PRs #627 and #629; @mpmdean)
+- the ``Parameter.set()`` method now correctly first updates the boundaries and then the value (Issue #636, PR #637; @arunpersaud)
+
+Various:
+
+- fixed typo for the use of expressions in the documentation (Issue #610; @jkrogager)
+- removal of PY2-compatibility and unused code and improved test coverage (PRs #619, #631, and #633)
+- removed deprecated ``isParameter`` function and automatic conversion of an ``uncertainties`` object (PR #626)
+- inaccurate FWHM calculations were removed from built-in models, others labeled as estimates (Issue #616 and PR #630)
+- corrected spelling mistake for the Doniach lineshape and model (Issue #634; @rayosborn)
+- removed unsupported/untested code for IPython notebooks in lmfit/ui/*
+
+
+.. _whatsnew_100_label:
+
+Version 1.0.0 Release Notes
+============================
+
+**Version 1.0.0 supports Python 3.5, 3.6, 3.7, and 3.8**
+
+New features:
+
+- no new features are introduced in 1.0.0.
+
+Improvements:
+
+- support for Python 2 and use of the ``six`` package are removed. (PR #612)
+
+Various:
+
+- documentation updates to clarify the use of ``emcee``. (PR #614)
+
+
+.. _whatsnew_0915_label:
+
+Version 0.9.15 Release Notes
+============================
+
+**Version 0.9.15 is the last release that supports Python 2.7**; it now also fully supports Python 3.8.
+
+New features, improvements, and bug fixes:
+
+- move application of parameter bounds to setter instead of getter (PR #587)
+- add support for non-array Jacobian types in least_squares (Issue #588, @ezwelty in PR #589)
+- add more information (i.e., acor and acceptance_fraction) about emcee fit (@j-zimmermann in PR #593)
+- "name" is now a required positional argument for Parameter class, update the magic methods (PR #595)
+- fix nvars count and bound handling in confidence interval calculations (Issue #597, PR #598)
+- support Python 3.8; requires asteval >= 0.9.16 (PR #599)
+- only support emcee version 3 (i.e., no PTSampler anymore) (PR #600)
+- fix and refactor prob_bunc in confidence interval calculations (PR #604)
+- fix adding Parameters with custom user-defined symbols (Issue #607, PR #608; thanks to @gbouvignies for the report)
+
+Various:
+
+- bump requirements to LTS version of SciPy/ NumPy and code clean-up (PR #591)
+- documentation updates (PR #596, and others)
+- improve test coverage and Travis CI updates (PR #595, and others)
+- update pre-commit hooks and configuration in setup.cfg
+
+To-be deprecated:
+- function Parameter.isParameter and conversion from uncertainties.core.Variable to value in _getval (PR #595)
 
 .. _whatsnew_0914_label:
 
 Version 0.9.14 Release Notes
-==========================================
+============================
 
 New features:
 
@@ -50,7 +179,7 @@ Various:
 .. _whatsnew_0913_label:
 
 Version 0.9.13 Release Notes
-==========================================
+============================
 
 New features:
 
@@ -63,7 +192,7 @@ Bug fixes:
 
 - delay import of matplotlib (and so, the selection of its backend) as late as possible (#528, #529)
 - fix for saving, loading, and reloading ModelResults (#534)
-- fix to leastsq to report the best-fit values, not the values tried last  (#535, #536)
+- fix to leastsq to report the best-fit values, not the values tried last (#535, #536)
 - fix synchronization of all parameter values on Model.guess() (#539, #542)
 - improve deprecation warnings for outdated nan_policy keywords (#540)
 - fix for edge case in gformat() (#547)
@@ -78,7 +207,7 @@ Project management:
 .. _whatsnew_0912_label:
 
 Version 0.9.12 Release Notes
-==========================================
+============================
 
 Lmfit package is now licensed under BSD-3.
 
@@ -109,7 +238,7 @@ New features:
 .. _AMPGO paper: http://leeds-faculty.colorado.edu/glover/fred%20pubs/416%20-%20AMP%20(TS)%20for%20Constrained%20Global%20Opt%20w%20Lasdon%20et%20al%20.pdf
 
 Version 0.9.10 Release Notes
-==========================================
+============================
 Two new global algorithms were added: basinhopping and AMPGO.
 Basinhopping wraps the method present in ``scipy``, and more information
 can be found in the documentation (:func:`~lmfit.minimizer.Minimizer.basinhopping`
@@ -134,7 +263,7 @@ Bugfixes:
 .. _whatsnew_099_label:
 
 Version 0.9.9 Release Notes
-==========================================
+===========================
 Lmfit now uses the asteval (https://github.com/newville/asteval) package
 instead of distributing its own copy. The minimum required asteval version
 is 0.9.12, which is available on PyPI. If you see import errors related to
@@ -144,16 +273,16 @@ asteval, please make sure that you actually have the latest version installed.
 .. _whatsnew_096_label:
 
 Version 0.9.6 Release Notes
-==========================================
+===========================
 
-Support for SciPy 0.14 has been dropped: SciPy 0.15 is now required.  This
+Support for SciPy 0.14 has been dropped: SciPy 0.15 is now required. This
 is especially important for lmfit maintenance, as it means we can now rely
 on SciPy having code for differential evolution and do not need to keep a
 local copy.
 
 A brute force method was added, which can be used either with
 :meth:`Minimizer.brute` or using the ``method='brute'`` option to
-:meth:`Minimizer.minimize`.  This method requires finite bounds on
+:meth:`Minimizer.minimize`. This method requires finite bounds on
 all varying parameters, or that parameters have a finite
 ``brute_step`` attribute set to specify the step size.
 
@@ -169,7 +298,7 @@ from the uncertainties in the model parameters.
 
 Parameters have two new attributes: ``brute_step``, to specify the step
 size when using the ``brute`` method, and ``user_data``, which is unused but
-can be used to hold additional information the user may desire.  This will
+can be used to hold additional information the user may desire. This will
 be preserved on copy and pickling.
 
 Several bug fixes and cleanups.
@@ -182,14 +311,14 @@ Tests can now be run either with nose or pytest.
 .. _whatsnew_095_label:
 
 Version 0.9.5 Release Notes
-==========================================
+===========================
 
 Support for Python 2.6 and SciPy 0.13 has been dropped.
 
 .. _whatsnew_094_label:
 
 Version 0.9.4 Release Notes
-==========================================
+===========================
 
 Some support for the new ``least_squares`` routine from SciPy 0.17 has been
 added.
@@ -200,13 +329,13 @@ so that the Parameter value does not need ``sigma = params['sigma'].value``.
 The older, explicit usage still works, but the docs, samples, and tests
 have been updated to use the simpler usage.
 
-Support for Python 2.6 and SciPy 0.13 is now explicitly deprecated and wil
+Support for Python 2.6 and SciPy 0.13 is now explicitly deprecated and will
 be dropped in version 0.9.5.
 
 .. _whatsnew_093_label:
 
 Version 0.9.3 Release Notes
-==========================================
+===========================
 
 Models involving complex numbers have been improved.
 
@@ -221,25 +350,25 @@ ASV benchmarking code added.
 .. _whatsnew_090_label:
 
 Version 0.9.0 Release Notes
-==========================================
+===========================
 
 This upgrade makes an important, non-backward-compatible change to the way
-many fitting scripts and programs will work.  Scripts that work with
-version 0.8.3 will not work with version 0.9.0 and vice versa.  The change
+many fitting scripts and programs will work. Scripts that work with
+version 0.8.3 will not work with version 0.9.0 and vice versa. The change
 was not made lightly or without ample discussion, and is really an
-improvement.  Modifying scripts that did work with 0.8.3 to work with 0.9.0
+improvement. Modifying scripts that did work with 0.8.3 to work with 0.9.0
 is easy, but needs to be done.
 
 
 
 Summary
-~~~~~~~~~~~~
+~~~~~~~
 
 The upgrade from 0.8.3 to 0.9.0 introduced the :class:`MinimizerResult`
 class (see :ref:`fit-results-label`) which is now used to hold the return
-value from :func:`minimize` and :meth:`Minimizer.minimize`.  This returned
+value from :func:`minimize` and :meth:`Minimizer.minimize`. This returned
 object contains many goodness of fit statistics, and holds the optimized
-parameters from the fit.  Importantly, the parameters passed into
+parameters from the fit. Importantly, the parameters passed into
 :func:`minimize` and :meth:`Minimizer.minimize` are no longer modified by
 the fit. Instead, a copy of the passed-in parameters is made which is
 changed and returns as the :attr:`params` attribute of the returned
@@ -247,20 +376,20 @@ changed and returns as the :attr:`params` attribute of the returned
 
 
 Impact
-~~~~~~~~~~~~~
+~~~~~~
 
 This upgrade means that a script that does::
 
     my_pars = Parameters()
-    my_pars.add('amp',    value=300.0, min=0)
-    my_pars.add('center', value=  5.0, min=0, max=10)
-    my_pars.add('decay',  value=  1.0, vary=False)
+    my_pars.add('amp', value=300.0, min=0)
+    my_pars.add('center', value=5.0, min=0, max=10)
+    my_pars.add('decay', value=1.0, vary=False)
 
     result = minimize(objfunc, my_pars)
 
 will still work, but that ``my_pars`` will **NOT** be changed by the fit.
 Instead, ``my_pars`` is copied to an internal set of parameters that is
-changed in the fit, and this copy is then put in ``result.params``.  To
+changed in the fit, and this copy is then put in ``result.params``. To
 look at fit results, use ``result.params``, not ``my_pars``.
 
 This has the effect that ``my_pars`` will still hold the starting parameter
@@ -280,23 +409,23 @@ first fit ``result1``, and the result of the final fit ``result2``.
 
 
 Discussion
-~~~~~~~~~~~~~~
+~~~~~~~~~~
 
 The main goal for making this change were to
 
 1. give a better return value to :func:`minimize` and
    :meth:`Minimizer.minimize` that can hold all of the information
-   about a fit.  By having the return value be an instance of the
+   about a fit. By having the return value be an instance of the
    :class:`MinimizerResult` class, it can hold an arbitrary amount of
    information that is easily accessed by attribute name, and even
-   be given methods.  Using objects is good!
+   be given methods. Using objects is good!
 
 2. To limit or even eliminate the amount of "state information" a
-   :class:`Minimizer` holds.  By state information, we mean how much of
-   the previous fit is remembered after a fit is done.  Keeping (and
+   :class:`Minimizer` holds. By state information, we mean how much of
+   the previous fit is remembered after a fit is done. Keeping (and
    especially using) such information about a previous fit means that
    a :class:`Minimizer` might give different results even for the same
-   problem if run a second time.  While it's desirable to be able to
+   problem if run a second time. While it's desirable to be able to
    adjust a set of :class:`Parameters` re-run a fit to get an improved
    result, doing this by changing an internal attribute
    (:attr:`Minimizer.params`) has the undesirable side-effect of not

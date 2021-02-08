@@ -1,11 +1,11 @@
 """Implementation of the Model interface."""
+
 from collections import OrderedDict
 from copy import deepcopy
 from functools import wraps
 import inspect
 import json
 import operator
-import sys
 import warnings
 
 import numpy as np
@@ -21,7 +21,7 @@ from .printfuncs import ci_report, fit_report, fitreport_html_table
 # Use pandas.isnull for aligning missing data if pandas is available.
 # otherwise use numpy.isnan
 try:
-    from pandas import isnull, Series
+    from pandas import Series, isnull
 except ImportError:
     isnull = np.isnan
     Series = type(NotImplemented)
@@ -37,7 +37,7 @@ def _align(var, mask, data):
 
 
 try:
-    import matplotlib  # noqa: F401
+    from matplotlib import pyplot as plt
     _HAS_MATPLOTLIB = True
 except Exception:
     _HAS_MATPLOTLIB = False
@@ -60,9 +60,8 @@ def get_reducer(option):
 
     Parameters
     ----------
-    option : str
-        Should be one of `['real', 'imag', 'abs', 'angle']`. Implements the
-        numpy function of the same name.
+    option : {'real', 'imag', 'abs', 'angle'}
+        Implements the NumPy function with the same name.
 
     Returns
     -------
@@ -71,7 +70,7 @@ def get_reducer(option):
 
     """
     if option not in ['real', 'imag', 'abs', 'angle']:
-        raise ValueError("Invalid parameter name ('%s') for function 'propagate_err'." % option)
+        raise ValueError("Invalid option ('%s') for function 'propagate_err'." % option)
 
     def reducer(array):
         """Convert a complex array to a real array.
@@ -82,8 +81,9 @@ def get_reducer(option):
         Parameters
         ----------
         array : array-like
-            Input array. If complex, will be converted to real array via one
-            of the following numpy functions: `real`, `imag`, `abs`, or `angle`.
+            Input array. If complex, will be converted to real array via
+            one of the following NumPy functions: :numpydoc:`real`,
+            :numpydoc:`imag`, :numpydoc:`abs`, or :numpydoc:`angle`.
 
         Returns
         -------
@@ -101,20 +101,20 @@ def get_reducer(option):
 
 
 def propagate_err(z, dz, option):
-    """Perform error propagation on a vector of complex uncertainties to
-    get values for magnitude (abs) and phase (angle) uncertainty.
+    """Perform error propagation on a vector of complex uncertainties.
+
+    Required to get values for magnitude (abs) and phase (angle)
+    uncertainty.
 
     Parameters
     ----------
     z : array-like
         Array of complex or real numbers.
-
     dz : array-like
-        Array of uncertainties corresponding to z. Must satisfy
-        `numpy.shape(dz) == np.shape(z)`.
-
-    option : str
-        Should be one of `['real', 'imag', 'abs', 'angle']`.
+        Array of uncertainties corresponding to `z`. Must satisfy
+        ``numpy.shape(dz) == numpy.shape(z)``.
+    option : {'real', 'imag', 'abs', 'angle'}
+        How to convert the array `z` to an array with real numbers.
 
     Returns
     -------
@@ -123,22 +123,26 @@ def propagate_err(z, dz, option):
 
     Notes
     -----
-    Uncertainties are 1/weights. If the weights provided are real, they are
-    assumed to apply equally to the real and imaginary parts. If the weights
-    are complex, the real part of the weights are applied to the real
-    part of the residual and the imaginary part is treated correspondingly.
+    Uncertainties are ``1/weights``. If the weights provided are real,
+    they are assumed to apply equally to the real and imaginary parts. If
+    the weights are complex, the real part of the weights are applied to
+    the real part of the residual and the imaginary part is treated
+    correspondingly.
 
-    In the case where `option == 'angle'` and `numpy.abs(z) == 0` for any value
-    of `z` the phase angle uncertainty becomes the entire circle and so
-    a value of pi is returned.
+    In the case where ``option='angle'`` and ``numpy.abs(z) == 0`` for any
+    value of `z` the phase angle uncertainty becomes the entire circle and
+    so a value of `math:pi` is returned.
 
-    In the case where `option == 'abs'` and `numpy.abs(z) == 0` for any value of
-    `z` the mangnitude uncertainty is approximated by `numpy.abs(dz)` for that
-    value.
+    In the case where ``option='abs'`` and ``numpy.abs(z) == 0`` for any
+    value of `z` the mangnitude uncertainty is approximated by
+    ``numpy.abs(dz)`` for that value.
 
     """
     if option not in ['real', 'imag', 'abs', 'angle']:
-        raise ValueError("Invalid parameter name ('%s') for function 'propagate_err'." % option)
+        raise ValueError("Invalid option ('%s') for function 'propagate_err'." % option)
+
+    if not z.shape == dz.shape:
+        raise ValueError("shape of z: %s != shape of dz: %s" % (z.shape, dz.shape))
 
     # Check the main vector for complex. Do nothing if real.
     if any(np.iscomplex(z)):
@@ -182,19 +186,19 @@ def propagate_err(z, dz, option):
     return err
 
 
-class Model(object):
-    """Model class."""
+class Model:
+    """Create a model from a user-supplied model function."""
 
     _forbidden_args = ('data', 'weights', 'params')
     _invalid_ivar = "Invalid independent variable name ('%s') for function %s"
     _invalid_par = "Invalid parameter name ('%s') for function %s"
     _invalid_hint = "unknown parameter hint '%s' for param '%s'"
     _hint_names = ('value', 'vary', 'min', 'max', 'expr')
+    valid_forms = ()
 
     def __init__(self, func, independent_vars=None, param_names=None,
                  nan_policy='raise', prefix='', name=None, **kws):
-        """Create a model from a user-supplied model function.
-
+        """
         The model function will normally take an independent variable
         (generally, the first argument) and a series of arguments that are
         meant to be parameters for the model. It will return an array of
@@ -204,45 +208,43 @@ class Model(object):
         ----------
         func : callable
             Function to be wrapped.
-        independent_vars : list of str, optional
-            Arguments to func that are independent variables (default is None).
-        param_names : list of str, optional
-            Names of arguments to func that are to be made into parameters
-            (default is None).
-        nan_policy : str, optional
-            How to handle NaN and missing values in data. Must be one of
-            'raise' (default), 'propagate', or 'omit'. See Note below.
+        independent_vars : :obj:`list` of :obj:`str`, optional
+            Arguments to `func` that are independent variables (default is
+            None).
+        param_names : :obj:`list` of :obj:`str`, optional
+            Names of arguments to `func` that are to be made into
+            parameters (default is None).
+        nan_policy : {'raise', 'propagate', 'omit'}, optional
+            How to handle NaN and missing values in data. See Notes below.
         prefix : str, optional
             Prefix used for the model.
         name : str, optional
-            Name for the model. When None (default) the name is the same as
-            the model function (`func`).
+            Name for the model. When None (default) the name is the same
+            as the model function (`func`).
         **kws : dict, optional
             Additional keyword arguments to pass to model function.
 
         Notes
         -----
-        1. Parameter names are inferred from the function arguments,
-        and a residual function is automatically constructed.
+        1. Parameter names are inferred from the function arguments, and a
+        residual function is automatically constructed.
 
         2. The model function must return an array that will be the same
         size as the data being modeled.
 
-        3. nan_policy sets what to do when a NaN or missing value is
+        3. `nan_policy` sets what to do when a NaN or missing value is
         seen in the data. Should be one of:
 
-           - 'raise' : Raise a ValueError (default)
-
-           - 'propagate' : do nothing
-
-           -  'omit' : drop missing data
+           - `'raise'` : raise a `ValueError` (default)
+           - `'propagate'` : do nothing
+           - `'omit'` : drop missing data
 
         Examples
         --------
-        The model function will normally take an independent variable (generally,
-        the first argument) and a series of arguments that are meant to be
-        parameters for the model.  Thus, a simple peak using a Gaussian
-        defined as:
+        The model function will normally take an independent variable
+        (generally, the first argument) and a series of arguments that are
+        meant to be parameters for the model. Thus, a simple peak using a
+        Gaussian defined as:
 
         >>> import numpy as np
         >>> def gaussian(x, amp, cen, wid):
@@ -252,8 +254,8 @@ class Model(object):
 
         >>> gmodel = Model(gaussian)
 
-        this will automatically discover the names of the independent variables
-        and parameters:
+        this will automatically discover the names of the independent
+        variables and parameters:
 
         >>> print(gmodel.param_names, gmodel.independent_vars)
         ['amp', 'cen', 'wid'], ['x']
@@ -300,6 +302,8 @@ class Model(object):
         funcdef = None
         if HAS_DILL:
             funcdef = self.func
+        if self.func.__name__ == '_eval':
+            funcdef = self.expr
         state = (self.func.__name__, funcdef, self._name, self._prefix,
                  self.independent_vars, self._param_root_names,
                  self.param_hints, self.nan_policy, self.opts)
@@ -313,7 +317,7 @@ class Model(object):
 
         Parameters
         ----------
-        state :
+        state
             Serialized state from `_get_state`.
         funcdefs : dict, optional
             Dictionary of function definitions to use to construct Model.
@@ -327,16 +331,16 @@ class Model(object):
         Parameters
         ----------
         **kws : optional
-            Keyword arguments that are passed to `json.dumps()`.
+            Keyword arguments that are passed to `json.dumps`.
 
         Returns
         -------
         str
-           JSON string representation of Model.
+            JSON string representation of Model.
 
         See Also
         --------
-        loads(), json.dumps()
+        loads, json.dumps
 
         """
         return json.dumps(encode4js(self._get_state()), **kws)
@@ -347,19 +351,19 @@ class Model(object):
         Parameters
         ----------
         fp : file-like object
-            an open and ``.write()``-supporting file-like object.
+            An open and `.write()`-supporting file-like object.
         **kws : optional
-            Keyword arguments that are passed to `json.dumps()`.
+            Keyword arguments that are passed to `json.dumps`.
 
         Returns
         -------
-        None or int
-            Return value from `fp.write()`. None for Python 2.7 and the
-            number of characters written in Python 3.
+        int
+            Return value from `fp.write()`: the number of characters
+            written.
 
         See Also
         --------
-        dumps(), load(), json.dump()
+        dumps, load, json.dump
 
         """
         return fp.write(self.dumps(**kws))
@@ -370,20 +374,20 @@ class Model(object):
         Parameters
         ----------
         s : str
-            Input JSON string containing serialized Model
+            Input JSON string containing serialized Model.
         funcdefs : dict, optional
             Dictionary of function definitions to use to construct Model.
         **kws : optional
-            Keyword arguments that are passed to `json.loads()`.
+            Keyword arguments that are passed to `json.loads`.
 
         Returns
         -------
-        :class:`Model`
-           Model created from JSON string.
+        Model
+            Model created from JSON string.
 
         See Also
         --------
-        dump(), dumps(), load(), json.loads()
+        dump, dumps, load, json.loads
 
         """
         tmp = decode4js(json.loads(s, **kws))
@@ -395,20 +399,20 @@ class Model(object):
         Parameters
         ----------
         fp : file-like object
-            An open and ``.read()``-supporting file-like object.
+            An open and `.read()`-supporting file-like object.
         funcdefs : dict, optional
             Dictionary of function definitions to use to construct Model.
         **kws : optional
-            Keyword arguments that are passed to `loads()`.
+            Keyword arguments that are passed to `loads`.
 
         Returns
         -------
-        :class:`Model`
-           Model created from `fp`.
+        Model
+            Model created from `fp`.
 
         See Also
         --------
-        dump(), loads(), json.load()
+        dump, loads, json.load
 
         """
         return self.loads(fp.read(), funcdefs=funcdefs, **kws)
@@ -437,11 +441,10 @@ class Model(object):
 
     def _set_paramhints_prefix(self):
         """Reset parameter hints for prefix: intended to be overwritten."""
-        pass
 
     @property
     def param_names(self):
-        """Return the parameters of the Model."""
+        """Return the parameter names of the Model."""
         return self._param_names
 
     def __repr__(self):
@@ -468,7 +471,7 @@ class Model(object):
             for name, defval in self.func.kwargs:
                 kw_args[name] = defval
         # 2. modern, best-practice approach: use inspect.signature
-        elif sys.version_info > (3, 4):
+        else:
             pos_args = []
             kw_args = {}
             keywords_ = None
@@ -483,15 +486,6 @@ class Model(object):
                         kw_args[fnam] = fpar.default
                 elif fpar.kind == fpar.VAR_POSITIONAL:
                     raise ValueError("varargs '*%s' is not supported" % fnam)
-        # 3. Py2 compatible approach
-        else:
-            argspec = inspect.getargspec(self.func)
-            keywords_ = argspec.keywords
-            pos_args = argspec.args
-            kw_args = {}
-            if argspec.defaults is not None:
-                for val in reversed(argspec.defaults):
-                    kw_args[pos_args.pop()] = val
         # inspection done
 
         self._func_haskeywords = keywords_ is not None
@@ -552,19 +546,18 @@ class Model(object):
         self._param_names = names[:]
 
     def set_param_hint(self, name, **kwargs):
-        """Set *hints* to use when creating parameters with `make_params()` for
-        the named parameter.
+        """Set *hints* to use when creating parameters with `make_params()`.
 
-        This is especially convenient for setting initial values. The `name`
-        can include the models `prefix` or not. The hint given can also
-        include optional bounds and constraints ``(value, vary, min, max, expr)``,
-        which will be used by make_params() when building default parameters.
+        This is especially convenient for setting initial values. The
+        `name` can include the models `prefix` or not. The hint given can
+        also include optional bounds and constraints
+        ``(value, vary, min, max, expr)``, which will be used by
+        `make_params()` when building default parameters.
 
         Parameters
         ----------
         name : str
             Parameter name.
-
         **kwargs : optional
             Arbitrary keyword arguments, needs to be a Parameter attribute.
             Can be any of the following:
@@ -572,14 +565,17 @@ class Model(object):
             - value : float, optional
                 Numerical Parameter value.
             - vary : bool, optional
-                Whether the Parameter is varied during a fit (default is True).
+                Whether the Parameter is varied during a fit (default is
+                True).
             - min : float, optional
-                Lower bound for value (default is `-numpy.inf`, no lower bound).
+                Lower bound for value (default is ``-numpy.inf``, no lower
+                bound).
             - max : float, optional
-                Upper bound for value (default is `numpy.inf`, no upper bound).
+                Upper bound for value (default is ``numpy.inf``, no upper
+                bound).
             - expr : str, optional
-                Mathematical expression used to constrain the value during the fit.
-
+                Mathematical expression used to constrain the value during
+                the fit.
 
         Example
         --------
@@ -607,7 +603,7 @@ class Model(object):
         Parameters
         ----------
         colwidth : int, optional
-           Width of each column, except for first and last columns.
+            Width of each column, except for first and last columns.
 
         """
         name_len = max(len(s) for s in self.param_hints)
@@ -632,18 +628,18 @@ class Model(object):
         **kwargs : optional
             Parameter names and initial values.
 
-
         Returns
         ---------
         params : Parameters
+            Parameters object for the Model.
 
         Notes
         -----
-        1. The parameters may or may not have decent initial values for each
-        parameter.
+        1. The parameters may or may not have decent initial values for
+        each parameter.
 
-        2. This applies any default values or parameter hints that may have
-        been set.
+        2. This applies any default values or parameter hints that may
+        have been set.
 
         """
         params = Parameters()
@@ -709,8 +705,8 @@ class Model(object):
     def guess(self, data, **kws):
         """Guess starting values for the parameters of a Model.
 
-        This is not implemented for all models, but is available for many of
-        the built-in models.
+        This is not implemented for all models, but is available for many
+        of the built-in models.
 
         Parameters
         ----------
@@ -721,17 +717,19 @@ class Model(object):
 
         Returns
         -------
-        params : Parameters
-
-        Notes
-        -----
-        Should be implemented for each model subclass to run
-        self.make_params(), update starting values and return a
-        Parameters object.
+        Parameters
+            Initial, guessed values for the parameters of a Model.
 
         Raises
         ------
         NotImplementedError
+            If the `guess` method is not implemented for a Model.
+
+        Notes
+        -----
+        Should be implemented for each model subclass to run
+        `self.make_params()`, update starting values and return a
+        Parameters object.
 
         """
         cname = self.__class__.__name__
@@ -741,20 +739,20 @@ class Model(object):
     def _residual(self, params, data, weights, **kwargs):
         """Return the residual.
 
-        Default residual: (data-model)*weights.
+        Default residual: ``(data-model)*weights``.
 
         If the model returns complex values, the residual is computed by
-        treating the real and imaginary parts separately. In this case,
-        if the weights provided are real, they are assumed to apply
-        equally to the real and imaginary parts. If the weights are
-        complex, the real part of the weights are applied to the real
-        part of the residual and the imaginary part is treated
-        correspondingly.
+        treating the real and imaginary parts separately. In this case, if
+        the weights provided are real, they are assumed to apply equally
+        to the real and imaginary parts. If the weights are complex, the
+        real part of the weights are applied to the real part of the
+        residual and the imaginary part is treated correspondingly.
 
-        Since the underlying scipy.optimize routines expect numpy.float
-        arrays, the only complex type supported is np.complex.
+        Since the underlying `scipy.optimize` routines expect
+        ``numpy.float`` arrays, the only complex type supported is
+        ``complex``.
 
-        The "ravels" throughout are necessary to support pandas.Series.
+        The "ravels" throughout are necessary to support `pandas.Series`.
 
         """
         model = self.eval(params, **kwargs)
@@ -767,16 +765,16 @@ class Model(object):
 
         diff = model - data
 
-        if diff.dtype == np.complex:
+        if diff.dtype == complex:
             # data/model are complex
-            diff = diff.ravel().view(np.float)
+            diff = diff.ravel().view(float)
             if weights is not None:
-                if weights.dtype == np.complex:
+                if weights.dtype == complex:
                     # weights are complex
-                    weights = weights.ravel().view(np.float)
+                    weights = weights.ravel().view(float)
                 else:
                     # real weights but complex data
-                    weights = (weights + 1j * weights).ravel().view(np.float)
+                    weights = (weights + 1j * weights).ravel().view(float)
         if weights is not None:
             diff *= weights
         return np.asarray(diff).ravel()  # for compatibility with pandas.Series
@@ -835,10 +833,10 @@ class Model(object):
 
         Notes
         -----
-        1. if `params` is None, the values for all parameters are
-        expected to be provided as keyword arguments.  If `params` is
-        given, and a keyword argument for a parameter value is also given,
-        the keyword argument will be used.
+        1. if `params` is None, the values for all parameters are expected
+        to be provided as keyword arguments. If `params` is given, and a
+        keyword argument for a parameter value is also given, the keyword
+        argument will be used.
 
         2. all non-parameter arguments for the model function, **including
         all the independent variables** will need to be passed in using
@@ -865,8 +863,8 @@ class Model(object):
         Returns
         -------
         OrderedDict
-            Keys are prefixes for component model, values are value of each
-            component.
+            Keys are prefixes for component model, values are value of
+            each component.
 
         """
         key = self._prefix
@@ -876,7 +874,7 @@ class Model(object):
 
     def fit(self, data, params=None, weights=None, method='leastsq',
             iter_cb=None, scale_covar=True, verbose=False, fit_kws=None,
-            nan_policy=None, calc_covar=True, **kwargs):
+            nan_policy=None, calc_covar=True, max_nfev=None, **kwargs):
         """Fit the model to the data using the supplied Parameters.
 
         Parameters
@@ -885,9 +883,9 @@ class Model(object):
             Array of data to be fit.
         params : Parameters, optional
             Parameters to use in fit (default is None).
-        weights : array_like of same size as `data`, optional
-            Weights to use for the calculation of the fit residual (default
-            is None).
+        weights : array_like, optional
+            Weights to use for the calculation of the fit residual
+            (default is None). Must have the same size as `data`.
         method : str, optional
             Name of fitting method to use (default is `'leastsq'`).
         iter_cb : callable, optional
@@ -895,29 +893,47 @@ class Model(object):
         scale_covar : bool, optional
             Whether to automatically scale the covariance matrix when
             calculating uncertainties (default is True).
-        verbose: bool, optional
-            Whether to print a message when a new parameter is added because
-            of a hint (default is True).
-        nan_policy : str, optional, one of 'raise' (default), 'propagate', or 'omit'.
-            What to do when encountering NaNs when fitting Model.
-        fit_kws: dict, optional
+        verbose : bool, optional
+            Whether to print a message when a new parameter is added
+            because of a hint (default is True).
+        fit_kws : dict, optional
             Options to pass to the minimizer being used.
+        nan_policy : {'raise', 'propagate', 'omit'}, optional
+            What to do when encountering NaNs when fitting Model.
         calc_covar : bool, optional
-            Whether to calculate the covariance matrix (default is True) for
-            solvers other than `leastsq` and `least_squares`. Requires the
-            `numdifftools` package to be installed.
-        **kwargs: optional
-            Arguments to pass to the  model function, possibly overriding
-            params.
+            Whether to calculate the covariance matrix (default is True)
+            for solvers other than `'leastsq'` and `'least_squares'`.
+            Requires the ``numdifftools`` package to be installed.
+        max_nfev : int or None, optional
+            Maximum number of function evaluations (default is None). The
+            default value depends on the fitting method.
+        **kwargs : optional
+            Arguments to pass to the model function, possibly overriding
+            parameters.
 
         Returns
         -------
         ModelResult
 
+        Notes
+        -----
+        1. if `params` is None, the values for all parameters are expected
+        to be provided as keyword arguments. If `params` is given, and a
+        keyword argument for a parameter value is also given, the keyword
+        argument will be used.
+
+        2. all non-parameter arguments for the model function, **including
+        all the independent variables** will need to be passed in using
+        keyword arguments.
+
+        3. Parameters (however passed in), are copied on input, so the
+        original Parameter objects are unchanged, and the updated values
+        are in the returned `ModelResult`.
+
         Examples
         --------
-        Take `t` to be the independent variable and data to be the curve we
-        will fit. Use keyword arguments to set initial guesses:
+        Take ``t`` to be the independent variable and data to be the curve
+        we will fit. Use keyword arguments to set initial guesses:
 
         >>> result = my_model.fit(data, tau=5, N=3, t=t)
 
@@ -928,21 +944,6 @@ class Model(object):
         Keyword arguments override Parameters.
 
         >>> result = my_model.fit(data, params, tau=5, t=t)
-
-        Notes
-        -----
-        1. if `params` is None, the values for all parameters are
-        expected to be provided as keyword arguments.  If `params` is
-        given, and a keyword argument for a parameter value is also given,
-        the keyword argument will be used.
-
-        2. all non-parameter arguments for the model function, **including
-        all the independent variables** will need to be passed in using
-        keyword arguments.
-
-        3. Parameters (however passed in), are copied on input, so the
-        original Parameter objects are unchanged, and the updated values
-        are in the returned `ModelResult`.
 
         """
         if params is None:
@@ -984,7 +985,7 @@ class Model(object):
             raise ValueError(msg)
 
         # Do not alter anything that implements the array interface (np.array, pd.Series)
-        # but convert other iterables (e.g., Python lists) to numpy arrays.
+        # but convert other iterables (e.g., Python lists) to NumPy arrays.
         if not hasattr(data, '__array__'):
             data = np.asfarray(data)
         for var in self.independent_vars:
@@ -1018,7 +1019,7 @@ class Model(object):
         output = ModelResult(self, params, method=method, iter_cb=iter_cb,
                              scale_covar=scale_covar, fcn_kws=kwargs,
                              nan_policy=self.nan_policy, calc_covar=calc_covar,
-                             **fit_kws)
+                             max_nfev=max_nfev, **fit_kws)
         output.fit(data=data, weights=weights)
         output.components = self.components
         return output
@@ -1035,22 +1036,17 @@ class Model(object):
         """*"""
         return CompositeModel(self, other, operator.mul)
 
-    def __div__(self, other):
-        """/"""
-        return CompositeModel(self, other, operator.truediv)
-
     def __truediv__(self, other):
         """/"""
         return CompositeModel(self, other, operator.truediv)
 
 
 class CompositeModel(Model):
-    """Combine two models (`left` and `right`) with a binary operator (`op`)
-    into a CompositeModel.
+    """Combine two models (`left` and `right`) with binary operator (`op`).
 
     Normally, one does not have to explicitly create a `CompositeModel`,
-    but can use normal Python operators `+`, '-', `*`, and `/` to combine
-    components as in::
+    but can use normal Python operators ``+``, ``-``, ``*``, and ``/`` to
+    combine components as in::
 
     >>> mod = Model(fcn1) + Model(fcn2) * Model(fcn3)
 
@@ -1079,7 +1075,7 @@ class CompositeModel(Model):
 
         Notes
         -----
-        1. The two models must use the same independent variable.
+        The two models must use the same independent variable.
 
         """
         if not isinstance(left, Model):
@@ -1131,7 +1127,7 @@ class CompositeModel(Model):
                                self.right._reprstring(long=long))
 
     def eval(self, params=None, **kwargs):
-        """TODO: docstring in public method."""
+        """Evaluate model function for composite model."""
         return self.op(self.left.eval(params=params, **kwargs),
                        self.right.eval(params=params, **kwargs))
 
@@ -1170,7 +1166,7 @@ def save_model(model, fname):
 
     Parameters
     ----------
-    model : model instance
+    model : Model
         Model to be saved.
     fname : str
         Name of file for saved Model.
@@ -1193,6 +1189,7 @@ def load_model(fname, funcdefs=None):
     Returns
     -------
     Model
+        Model object loaded from file.
 
     """
     m = Model(lambda x: x)
@@ -1202,7 +1199,7 @@ def load_model(fname, funcdefs=None):
 
 
 def _buildmodel(state, funcdefs=None):
-    """Build model from saved state.
+    """Build Model from saved state.
 
     Intended for internal use only.
 
@@ -1227,9 +1224,17 @@ def _buildmodel(state, funcdefs=None):
         if fcndef is None:
             raise ValueError("Cannot restore Model: model function not found")
 
-        model = Model(fcndef, name=name, prefix=prefix,
-                      independent_vars=ivars, param_names=pnames,
-                      nan_policy=nan_policy, **opts)
+        if fname == '_eval' and isinstance(fcndef, str):
+            from .models import ExpressionModel
+            model = ExpressionModel(fcndef, name=name,
+                                    independent_vars=ivars,
+                                    param_names=pnames,
+                                    nan_policy=nan_policy, **opts)
+
+        else:
+            model = Model(fcndef, name=name, prefix=prefix,
+                          independent_vars=ivars, param_names=pnames,
+                          nan_policy=nan_policy, **opts)
 
         for name, hint in phints.items():
             model.set_param_hint(name, **hint)
@@ -1245,7 +1250,7 @@ def save_modelresult(modelresult, fname):
 
     Parameters
     ----------
-    modelresult : ModelResult instance
+    modelresult : ModelResult
         ModelResult to be saved.
     fname : str
         Name of file for saved ModelResult.
@@ -1268,6 +1273,7 @@ def load_modelresult(fname, funcdefs=None):
     Returns
     -------
     ModelResult
+        ModelResult object loaded from file.
 
     """
     params = Parameters()
@@ -1280,16 +1286,16 @@ def load_modelresult(fname, funcdefs=None):
 class ModelResult(Minimizer):
     """Result from the Model fit.
 
-    This has many attributes and methods for viewing and working with
-    the results of a fit using Model. It inherits from Minimizer, so
-    that it can be used to modify and re-run the fit for the Model.
+    This has many attributes and methods for viewing and working with the
+    results of a fit using Model. It inherits from Minimizer, so that it
+    can be used to modify and re-run the fit for the Model.
 
     """
 
     def __init__(self, model, params, data=None, weights=None,
                  method='leastsq', fcn_args=None, fcn_kws=None,
                  iter_cb=None, scale_covar=True, nan_policy='raise',
-                 calc_covar=True, **fit_kws):
+                 calc_covar=True, max_nfev=None, **fit_kws):
         """
         Parameters
         ----------
@@ -1300,7 +1306,7 @@ class ModelResult(Minimizer):
         data : array_like, optional
             Data to be modeled.
         weights : array_like, optional
-            Weights to multiply (data-model) for fit residual.
+            Weights to multiply ``(data-model)`` for fit residual.
         method : str, optional
             Name of minimization method to use (default is `'leastsq'`).
         fcn_args : sequence, optional
@@ -1311,12 +1317,15 @@ class ModelResult(Minimizer):
             Function to call on each iteration of fit.
         scale_covar : bool, optional
             Whether to scale covariance matrix for uncertainty evaluation.
-        nan_policy : str, optional, one of 'raise' (default), 'propagate', or 'omit'.
+        nan_policy : {'raise', 'propagate', 'omit'}, optional
             What to do when encountering NaNs when fitting Model.
         calc_covar : bool, optional
-            Whether to calculate the covariance matrix (default is True) for
-            solvers other than `leastsq` and `least_squares`. Requires the
-            `numdifftools` package to be installed.
+            Whether to calculate the covariance matrix (default is True)
+            for solvers other than `'leastsq'` and `'least_squares'`.
+            Requires the ``numdifftools`` package to be installed.
+        max_nfev : int or None, optional
+            Maximum number of function evaluations (default is None). The
+            default value depends on the fitting method.
         **fit_kws : optional
             Keyword arguments to send to minimization routine.
 
@@ -1328,9 +1337,11 @@ class ModelResult(Minimizer):
         self.ci_out = None
         self.user_options = None
         self.init_params = deepcopy(params)
-        Minimizer.__init__(self, model._residual, params, fcn_args=fcn_args,
-                           fcn_kws=fcn_kws, iter_cb=iter_cb, nan_policy=nan_policy,
-                           scale_covar=scale_covar, calc_covar=calc_covar, **fit_kws)
+        Minimizer.__init__(self, model._residual, params,
+                           fcn_args=fcn_args, fcn_kws=fcn_kws,
+                           iter_cb=iter_cb, nan_policy=nan_policy,
+                           scale_covar=scale_covar, calc_covar=calc_covar,
+                           max_nfev=max_nfev, **fit_kws)
 
     def fit(self, data=None, params=None, weights=None, method=None,
             nan_policy=None, **kwargs):
@@ -1343,10 +1354,10 @@ class ModelResult(Minimizer):
         params : Parameters, optional
             Parameters with initial values for model.
         weights : array_like, optional
-            Weights to multiply (data-model) for fit residual.
+            Weights to multiply ``(data-model)`` for fit residual.
         method : str, optional
             Name of minimization method to use (default is `'leastsq'`).
-        nan_policy : str, optional, one of 'raise' (default), 'propagate', or 'omit'.
+        nan_policy : {'raise', 'propagate', 'omit'}, optional
             What to do when encountering NaNs when fitting Model.
         **kwargs : optional
             Keyword arguments to send to minimization routine.
@@ -1388,12 +1399,12 @@ class ModelResult(Minimizer):
         params : Parameters, optional
             Parameters to use.
         **kwargs : optional
-            Options to send to Model.eval()
+            Options to send to Model.eval().
 
         Returns
         -------
-        out : numpy.ndarray
-           Array for evaluated model.
+        numpy.ndarray
+            Array for evaluated model.
 
         """
         userkws = self.userkws.copy()
@@ -1408,15 +1419,15 @@ class ModelResult(Minimizer):
         Parameters
         ----------
         params : Parameters, optional
-            Parameters, defaults to ModelResult.params
+            Parameters, defaults to ModelResult.params.
         **kwargs : optional
-             Keyword arguments to pass to model function.
+            Keyword arguments to pass to model function.
 
         Returns
         -------
         OrderedDict
-             Keys are prefixes of component models, and values are
-             the estimated model value for each component of the model.
+            Keys are prefixes of component models, and values are the
+            estimated model value for each component of the model.
 
         """
         userkws = self.userkws.copy()
@@ -1434,26 +1445,16 @@ class ModelResult(Minimizer):
         Parameters
         ----------
         params : Parameters, optional
-             Parameters, defaults to ModelResult.params.
+            Parameters, defaults to ModelResult.params.
         sigma : float, optional
-             Confidence level, i.e. how many sigma (default is 1).
+            Confidence level, i.e. how many sigma (default is 1).
         **kwargs : optional
-             Values of options, independent variables, etcetera.
+            Values of options, independent variables, etcetera.
 
         Returns
         -------
         numpy.ndarray
-           Uncertainty at each value of the model.
-
-        Example
-        -------
-
-        >>> out = model.fit(data, params, x=x)
-        >>> dely = out.eval_uncertainty(x=x)
-        >>> plt.plot(x, data)
-        >>> plt.plot(x, out.best_fit)
-        >>> plt.fill_between(x, out.best_fit-dely,
-        ...                  out.best_fit+dely, color='#888888')
+            Uncertainty at each value of the model.
 
         Notes
         -----
@@ -1461,11 +1462,22 @@ class ModelResult(Minimizer):
            https://www.astro.rug.nl/software/kapteyn/kmpfittutorial.html#confidence-and-prediction-intervals,
            which references the original work of:
            J. Wolberg, Data Analysis Using the Method of Least Squares, 2006, Springer
-        2. The value of sigma is number of `sigma` values, and is converted to
-           a probability. Values of 1, 2, or 3 give probabilities of 0.6827,
-           0.9545, and 0.9973, respectively. If the sigma value is < 1, it is
-           interpreted as the probability itself. That is, `sigma=1` and
-           `sigma=0.6827` will give the same results, within precision errors.
+        2. The value of sigma is number of `sigma` values, and is converted
+           to a probability. Values of 1, 2, or 3 give probabilities of
+           0.6827, 0.9545, and 0.9973, respectively. If the sigma value is
+           < 1, it is interpreted as the probability itself. That is,
+           ``sigma=1`` and ``sigma=0.6827`` will give the same results,
+           within precision errors.
+
+        Examples
+        --------
+
+        >>> out = model.fit(data, params, x=x)
+        >>> dely = out.eval_uncertainty(x=x)
+        >>> plt.plot(x, data)
+        >>> plt.plot(x, out.best_fit)
+        >>> plt.fill_between(x, out.best_fit-dely,
+        ...                  out.best_fit+dely, color='#888888')
 
         """
         userkws = self.userkws.copy()
@@ -1475,13 +1487,15 @@ class ModelResult(Minimizer):
 
         nvarys = self.nvarys
         # ensure fjac and df2 are correct size if independent var updated by kwargs
-        ndata = self.model.eval(self.params, **userkws).size
+        ndata = self.model.eval(params, **userkws).size
         covar = self.covar
         fjac = np.zeros((nvarys, ndata))
         df2 = np.zeros(ndata)
+        if any([p.stderr is None for p in params.values()]):
+            return df2
 
         # find derivative by hand!
-        pars = self.params.copy()
+        pars = params.copy()
         for i in range(nvarys):
             pname = self.var_names[i]
             val0 = pars[pname].value
@@ -1510,10 +1524,10 @@ class ModelResult(Minimizer):
         """Calculate the confidence intervals for the variable parameters.
 
         Confidence intervals are calculated using the
-        :func:`confidence.conf_interval()` function and keyword
-        arguments (`**kwargs`) are passed to that function. The result
-        is stored in the :attr:`ci_out` attribute so that it can be
-        accessed without recalculating them.
+        :func:`confidence.conf_interval` function and keyword arguments
+        (`**kwargs`) are passed to that function. The result is stored in
+        the :attr:`ci_out` attribute so that it can be accessed without
+        recalculating them.
 
         """
         if self.ci_out is None:
@@ -1521,16 +1535,18 @@ class ModelResult(Minimizer):
         return self.ci_out
 
     def ci_report(self, with_offset=True, ndigits=5, **kwargs):
-        """Return a nicely formatted text report of the confidence intervals.
+        """Return a formatted text report of the confidence intervals.
 
         Parameters
         ----------
         with_offset : bool, optional
-             Whether to subtract best value from all other values (default is True).
+            Whether to subtract best value from all other values (default
+            is True).
         ndigits : int, optional
             Number of significant digits to show (default is 5).
-        **kwargs: optional
-            Keyword arguments that are passed to the `conf_interval` function.
+        **kwargs : optional
+            Keyword arguments that are passed to the `conf_interval`
+            function.
 
         Returns
         -------
@@ -1552,26 +1568,22 @@ class ModelResult(Minimizer):
         Parameters
         ----------
         modelpars : Parameters, optional
-           Known Model Parameters.
+            Known Model Parameters.
         show_correl : bool, optional
-           Whether to show list of sorted correlations (default is True).
+            Whether to show list of sorted correlations (default is True).
         min_correl : float, optional
-           Smallest correlation in absolute value to show (default is 0.1).
+            Smallest correlation in absolute value to show (default is 0.1).
         sort_pars : callable, optional
-           Whether to show parameter names sorted in alphanumerical order
-           (default is False). If False, then the parameters will be listed in
-           the order as they were added to the Parameters dictionary. If callable,
-           then this (one argument) function is used to extract a comparison key
-           from each list element.
+            Whether to show parameter names sorted in alphanumerical order
+            (default is False). If False, then the parameters will be
+            listed in the order as they were added to the Parameters
+            dictionary. If callable, then this (one argument) function is
+            used to extract a comparison key from each list element.
 
         Returns
         -------
-        text : str
-           Multi-line text of fit report.
-
-        See Also
-        --------
-        :func:`fit_report()`
+        str
+            Multi-line text of fit report.
 
         """
         report = fit_report(self, modelpars=modelpars,
@@ -1581,7 +1593,7 @@ class ModelResult(Minimizer):
         return '[[Model]]\n    %s\n%s' % (modname, report)
 
     def _repr_html_(self, show_correl=True, min_correl=0.1):
-        """Returns a HTML representation of parameters data."""
+        """Return a HTML representation of parameters data."""
         report = fitreport_html_table(self, show_correl=show_correl,
                                       min_correl=min_correl)
         modname = self.model._reprstring(long=True)
@@ -1593,16 +1605,16 @@ class ModelResult(Minimizer):
         Parameters
         ----------
         **kws : optional
-            Keyword arguments that are passed to `json.dumps()`.
+            Keyword arguments that are passed to `json.dumps`.
 
         Returns
         -------
         str
-           JSON string representation of ModelResult.
+            JSON string representation of ModelResult.
 
         See Also
         --------
-        loads(), json.dumps()
+        loads, json.dumps
 
         """
         out = {'__class__': 'lmfit.ModelResult', '__version__': '1',
@@ -1619,10 +1631,19 @@ class ModelResult(Minimizer):
                      'nfree', 'nvarys', 'redchi', 'scale_covar', 'calc_covar',
                      'success', 'userargs', 'userkws', 'values', 'var_names',
                      'weights', 'user_options'):
-            val = getattr(self, attr)
+            try:
+                val = getattr(self, attr)
+            except AttributeError:
+                continue
             if isinstance(val, np.bool_):
                 val = bool(val)
+
             out[attr] = encode4js(val)
+
+        val = out.get('message', '')
+        if isinstance(val, bytes):
+            out['message'] = str(val, encoding='ASCII')
+
         return json.dumps(out, **kws)
 
     def dump(self, fp, **kws):
@@ -1631,19 +1652,19 @@ class ModelResult(Minimizer):
         Parameters
         ----------
         fp : file-like object
-            An open and ``.write()``-supporting file-like object.
+            An open and `.write()`-supporting file-like object.
         **kws : optional
-            Keyword arguments that are passed to `json.dumps()`.
+            Keyword arguments that are passed to `json.dumps`.
 
         Returns
         -------
-        None or int
-            Return value from `fp.write()`. None for Python 2.7 and the
-            number of characters written in Python 3.
+        int
+            Return value from `fp.write()`: the number of characters
+            written.
 
         See Also
         --------
-        dumps(), load(), json.dump()
+        dumps, load, json.dump
 
         """
         return fp.write(self.dumps(**kws))
@@ -1654,20 +1675,20 @@ class ModelResult(Minimizer):
         Parameters
         ----------
         s : str
-            String representation of ModelResult, as from `dumps()`.
+            String representation of ModelResult, as from `dumps`.
         funcdefs : dict, optional
             Dictionary of custom function names and definitions.
         **kws : optional
-            Keyword arguments that are passed to `json.dumps()`.
+            Keyword arguments that are passed to `json.dumps`.
 
         Returns
         -------
-        :class:`ModelResult`
-           ModelResult instance from JSON string representation.
+        ModelResult
+            ModelResult instance from JSON string representation.
 
         See Also
         --------
-        load(), dumps(), json.dumps()
+        load, dumps, json.dumps
 
         """
         modres = json.loads(s, **kws)
@@ -1683,12 +1704,19 @@ class ModelResult(Minimizer):
 
         # params
         self.params = Parameters()
+        self.init_params = Parameters()
         state = {'unique_symbols': modres['unique_symbols'], 'params': []}
+        ini_state = {'unique_symbols': modres['unique_symbols'], 'params': []}
         for parstate in modres['params']:
-            _par = Parameter()
+            _par = Parameter(name='')
             _par.__setstate__(parstate)
             state['params'].append(_par)
+            _par = Parameter(name='')
+            _par.__setstate__(parstate)
+            ini_state['params'].append(_par)
+
         self.params.__setstate__(state)
+        self.init_params.__setstate__(ini_state)
 
         for attr in ('aborted', 'aic', 'best_fit', 'best_values', 'bic',
                      'chisqr', 'ci_out', 'col_deriv', 'covar', 'data',
@@ -1704,7 +1732,13 @@ class ModelResult(Minimizer):
         if len(self.userargs) == 2:
             self.data = self.userargs[0]
             self.weights = self.userargs[1]
-        self.init_params = self.model.make_params(**self.init_values)
+
+        for parname, val in self.init_values.items():
+            par = self.init_params.get(parname, None)
+            if par is not None:
+                par.correl = par.stderr = None
+                par.value = par.init_value = self.init_values[parname]
+        self.init_fit = self.model.eval(self.init_params, **self.userkws)
         self.result = MinimizerResult()
         self.result.params = self.params
         self.init_vals = list(self.init_values.items())
@@ -1716,20 +1750,20 @@ class ModelResult(Minimizer):
         Parameters
         ----------
         fp : file-like object
-            An open and ``.read()``-supporting file-like object.
+            An open and `.read()`-supporting file-like object.
         funcdefs : dict, optional
             Dictionary of function definitions to use to construct Model.
         **kws : optional
-            Keyword arguments that are passed to `loads()`.
+            Keyword arguments that are passed to `loads`.
 
         Returns
         -------
-        :class:`ModelResult`
-           ModelResult created from `fp`.
+        ModelResult
+            ModelResult created from `fp`.
 
         See Also
         --------
-        dump(), loads(), json.load()
+        dump, loads, json.load
 
         """
         return self.loads(fp.read(), funcdefs=funcdefs, **kws)
@@ -1741,11 +1775,10 @@ class ModelResult(Minimizer):
                  show_init=False, parse_complex='abs'):
         """Plot the fit results using matplotlib, if available.
 
-        The plot will include the data points, the initial fit curve (optional,
-        with `show_init=True`), and the best-fit curve. If the fit model
-        included weights or if `yerr` is specified, errorbars will also be
-        plotted.
-
+        The plot will include the data points, the initial fit curve
+        (optional, with ``show_init=True``), and the best-fit curve. If
+        the fit model included weights or if `yerr` is specified,
+        errorbars will also be plotted.
 
         Parameters
         ----------
@@ -1765,47 +1798,49 @@ class ModelResult(Minimizer):
         yerr : numpy.ndarray, optional
             Array of uncertainties for data array.
         numpoints : int, optional
-            If provided, the final and initial fit curves are evaluated not
-            only at data points, but refined to contain `numpoints` points in
-            total.
+            If provided, the final and initial fit curves are evaluated
+            not only at data points, but refined to contain `numpoints`
+            points in total.
         data_kws : dict, optional
-            Keyword arguments passed on to the plot function for data points.
+            Keyword arguments passed to the plot function for data points.
         fit_kws : dict, optional
-            Keyword arguments passed on to the plot function for fitted curve.
+            Keyword arguments passed to the plot function for fitted curve.
         init_kws : dict, optional
-            Keyword arguments passed on to the plot function for the initial
+            Keyword arguments passed to the plot function for the initial
             conditions of the fit.
         ax_kws : dict, optional
-            Keyword arguments for a new axis, if there is one being created.
+            Keyword arguments for a new axis, if a new one is created.
         show_init : bool, optional
-            Whether to show the initial conditions for the fit (default is False).
-        parse_complex : str, optional
-            How to reduce complex data for plotting.
-            Options are one of `['real', 'imag', 'abs', 'angle']`, which
-            correspond to the numpy functions of the same name (default is 'abs').
+            Whether to show the initial conditions for the fit (default is
+            False).
+        parse_complex : {'abs', 'real', 'imag', 'angle'}, optional
+            How to reduce complex data for plotting. Options are one of:
+            `'abs'` (default), `'real'`, `'imag'`, or `'angle'`, which
+            correspond to the NumPy functions with the same name.
 
         Returns
         -------
         matplotlib.axes.Axes
 
+        See Also
+        --------
+        ModelResult.plot_residuals : Plot the fit residuals using matplotlib.
+        ModelResult.plot : Plot the fit results and residuals using matplotlib.
+
         Notes
         -----
         For details about plot format strings and keyword arguments see
-        documentation of matplotlib.axes.Axes.plot.
+        documentation of `matplotlib.axes.Axes.plot`.
 
         If `yerr` is specified or if the fit model included weights, then
-        matplotlib.axes.Axes.errorbar is used to plot the data.  If `yerr` is
-        not specified and the fit includes weights, `yerr` set to 1/self.weights
+        `matplotlib.axes.Axes.errorbar` is used to plot the data. If
+        `yerr` is not specified and the fit includes weights, `yerr` set
+        to ``1/self.weights``.
 
         If model returns complex data, `yerr` is treated the same way that
         weights are in this case.
 
         If `ax` is None then `matplotlib.pyplot.gca(**ax_kws)` is called.
-
-        See Also
-        --------
-        ModelResult.plot_residuals : Plot the fit residuals using matplotlib.
-        ModelResult.plot : Plot the fit results and residuals using matplotlib.
 
         """
         from matplotlib import pyplot as plt
@@ -1893,38 +1928,39 @@ class ModelResult(Minimizer):
         yerr : numpy.ndarray, optional
             Array of uncertainties for data array.
         data_kws : dict, optional
-            Keyword arguments passed on to the plot function for data points.
+            Keyword arguments passed to the plot function for data points.
         fit_kws : dict, optional
-            Keyword arguments passed on to the plot function for fitted curve.
+            Keyword arguments passed to the plot function for fitted curve.
         ax_kws : dict, optional
-            Keyword arguments for a new axis, if there is one being created.
-        parse_complex : str, optional
-            How to reduce complex data for plotting.
-            Options are one of `['real', 'imag', 'abs', 'angle']`, which
-            correspond to the numpy functions of the same name (default is 'abs').
+            Keyword arguments for a new axis, if a new one is created.
+        parse_complex : {'abs', 'real', 'imag', 'angle'}, optional
+            How to reduce complex data for plotting. Options are one of:
+            `'abs'` (default), `'real'`, `'imag'`, or `'angle'`, which
+            correspond to the NumPy functions with the same name.
 
         Returns
         -------
         matplotlib.axes.Axes
 
+        See Also
+        --------
+        ModelResult.plot_fit : Plot the fit results using matplotlib.
+        ModelResult.plot : Plot the fit results and residuals using matplotlib.
+
         Notes
         -----
         For details about plot format strings and keyword arguments see
-        documentation of matplotlib.axes.Axes.plot.
+        documentation of `matplotlib.axes.Axes.plot`.
 
         If `yerr` is specified or if the fit model included weights, then
-        matplotlib.axes.Axes.errorbar is used to plot the data.  If `yerr` is
-        not specified and the fit includes weights, `yerr` set to 1/self.weights
+        `matplotlib.axes.Axes.errorbar` is used to plot the data. If
+        `yerr` is not specified and the fit includes weights, `yerr` set
+        to ``1/self.weights``.
 
         If model returns complex data, `yerr` is treated the same way that
         weights are in this case.
 
         If `ax` is None then `matplotlib.pyplot.gca(**ax_kws)` is called.
-
-        See Also
-        --------
-        ModelResult.plot_fit : Plot the fit results using matplotlib.
-        ModelResult.plot : Plot the fit results and residuals using matplotlib.
 
         """
         from matplotlib import pyplot as plt
@@ -1972,12 +2008,13 @@ class ModelResult(Minimizer):
              ylabel=None, yerr=None, numpoints=None, fig=None, data_kws=None,
              fit_kws=None, init_kws=None, ax_res_kws=None, ax_fit_kws=None,
              fig_kws=None, show_init=False, parse_complex='abs'):
-        """Plot the fit results and residuals using matplotlib, if available.
+        """Plot the fit results and residuals using matplotlib.
 
-        The method will produce a matplotlib figure with both results of the
-        fit and the residuals plotted. If the fit model included weights,
-        errorbars will also be plotted. To show the initial conditions for the
-        fit, pass the argument `show_init=True`.
+        The method will produce a matplotlib figure (if package available)
+        with both results of the fit and the residuals plotted. If the fit
+        model included weights, errorbars will also be plotted. To show
+        the initial conditions for the fit, pass the argument
+        ``show_init=True``.
 
         Parameters
         ----------
@@ -1994,58 +2031,60 @@ class ModelResult(Minimizer):
         yerr : numpy.ndarray, optional
             Array of uncertainties for data array.
         numpoints : int, optional
-            If provided, the final and initial fit curves are evaluated not
-            only at data points, but refined to contain `numpoints` points in
-            total.
+            If provided, the final and initial fit curves are evaluated
+            not only at data points, but refined to contain `numpoints`
+            points in total.
         fig : matplotlib.figure.Figure, optional
-            The figure to plot on. The default is None, which means use the
-            current pyplot figure or create one if there is none.
+            The figure to plot on. The default is None, which means use
+            the current pyplot figure or create one if there is none.
         data_kws : dict, optional
-            Keyword arguments passed on to the plot function for data points.
+            Keyword arguments passed to the plot function for data points.
         fit_kws : dict, optional
-            Keyword arguments passed on to the plot function for fitted curve.
+            Keyword arguments passed to the plot function for fitted curve.
         init_kws : dict, optional
-            Keyword arguments passed on to the plot function for the initial
+            Keyword arguments passed to the plot function for the initial
             conditions of the fit.
         ax_res_kws : dict, optional
             Keyword arguments for the axes for the residuals plot.
         ax_fit_kws : dict, optional
             Keyword arguments for the axes for the fit plot.
         fig_kws : dict, optional
-            Keyword arguments for a new figure, if there is one being created.
+            Keyword arguments for a new figure, if a new one is created.
         show_init : bool, optional
-            Whether to show the initial conditions for the fit (default is False).
-        parse_complex : str, optional
-            How to reduce complex data for plotting.
-            Options are one of `['real', 'imag', 'abs', 'angle']`, which
-            correspond to the numpy functions of the same name (default is 'abs').
-
+            Whether to show the initial conditions for the fit (default is
+            False).
+        parse_complex : {'abs', 'real', 'imag', 'angle'}, optional
+            How to reduce complex data for plotting. Options are one of:
+            `'abs'` (default), `'real'`, `'imag'`, or `'angle'`, which
+            correspond to the NumPy functions with the same name.
 
         Returns
         -------
-        A tuple with matplotlib's Figure and GridSpec objects.
-
-        Notes
-        -----
-        The method combines ModelResult.plot_fit and ModelResult.plot_residuals.
-
-        If `yerr` is specified or if the fit model included weights, then
-        matplotlib.axes.Axes.errorbar is used to plot the data.  If `yerr` is
-        not specified and the fit includes weights, `yerr` set to 1/self.weights
-
-        If model returns complex data, `yerr` is treated the same way that
-        weights are in this case.
-
-        If `fig` is None then `matplotlib.pyplot.figure(**fig_kws)` is called,
-        otherwise `fig_kws` is ignored.
+        tuple
+            A tuple with matplotlib's Figure and GridSpec objects.
 
         See Also
         --------
         ModelResult.plot_fit : Plot the fit results using matplotlib.
         ModelResult.plot_residuals : Plot the fit residuals using matplotlib.
 
+        Notes
+        -----
+        The method combines `ModelResult.plot_fit` and
+        `ModelResult.plot_residuals`.
+
+        If `yerr` is specified or if the fit model included weights, then
+        `matplotlib.axes.Axes.errorbar` is used to plot the data. If
+        `yerr` is not specified and the fit includes weights, `yerr` set
+        to ``1/self.weights``.
+
+        If model returns complex data, `yerr` is treated the same way that
+        weights are in this case.
+
+        If `fig` is None then `matplotlib.pyplot.figure(**fig_kws)` is
+        called, otherwise `fig_kws` is ignored.
+
         """
-        from matplotlib import pyplot as plt
         if data_kws is None:
             data_kws = {}
         if fit_kws is None:

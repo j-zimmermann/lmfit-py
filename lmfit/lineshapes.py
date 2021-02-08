@@ -1,24 +1,47 @@
 """Basic model line shapes and distribution functions."""
-from __future__ import division
 
-from numpy import arctan, cos, exp, finfo, float64, isnan, log, pi, sin, sqrt, where
-from numpy.testing import assert_allclose
+import warnings
+
+from numpy import (arctan, copysign, cos, exp, isnan, log, pi, real, sin, sqrt,
+                   where)
 from scipy.special import erf, erfc
 from scipy.special import gamma as gamfcn
-from scipy.special import gammaln, wofz
+from scipy.special import wofz
 
 log2 = log(2)
 s2pi = sqrt(2*pi)
 spi = sqrt(pi)
 s2 = sqrt(2.0)
-tiny = finfo(float64).eps
+# tiny had been numpy.finfo(numpy.float64).eps ~=2.2e16.
+# here, we explicitly set it to 1.e-15 == numpy.finfo(numpy.float64).resolution
+tiny = 1.0e-15
 
-functions = ('gaussian', 'lorentzian', 'voigt', 'pvoigt', 'moffat', 'pearson7',
-             'breit_wigner', 'damped_oscillator', 'dho', 'logistic', 'lognormal',
-             'students_t', 'expgaussian', 'donaich', 'skewed_gaussian',
-             'skewed_voigt', 'step', 'rectangle', 'erf', 'erfc', 'wofz',
-             'gamma', 'gammaln', 'exponential', 'powerlaw', 'linear',
-             'parabolic', 'sine', 'expsine', 'split_lorentzian')
+functions = ('gaussian', 'gaussian2d', 'lorentzian', 'voigt', 'pvoigt',
+             'moffat', 'pearson7', 'breit_wigner', 'damped_oscillator',
+             'dho', 'logistic', 'lognormal', 'students_t', 'expgaussian',
+             'doniach', 'donaich', 'skewed_gaussian', 'skewed_voigt',
+             'thermal_distribution', 'step', 'rectangle', 'exponential',
+             'powerlaw', 'linear', 'parabolic', 'sine', 'expsine',
+             'split_lorentzian')
+
+
+def not_zero(value):
+    """Return value with a minimal absolute size of tiny, preserving the sign.
+
+    This is a helper function to prevent ZeroDivisionError's.
+
+    Parameters
+    ----------
+    value : scalar
+        Value to be ensured not to be zero.
+
+    Returns
+    -------
+    scalar
+        Value ensured not to be zero.
+
+    """
+    return float(copysign(max(tiny, abs(value)), value))
 
 
 def gaussian(x, amplitude=1.0, center=0.0, sigma=1.0):
@@ -30,6 +53,20 @@ def gaussian(x, amplitude=1.0, center=0.0, sigma=1.0):
     """
     return ((amplitude/(max(tiny, s2pi*sigma)))
             * exp(-(1.0*x-center)**2 / max(tiny, (2*sigma**2))))
+
+
+def gaussian2d(x, y=0.0, amplitude=1.0, centerx=0.0, centery=0.0, sigmax=1.0,
+               sigmay=1.0):
+    """Return a 2-dimensional Gaussian function.
+
+    gaussian2d(x, y, amplitude, centerx, centery, sigmax, sigmay) =
+        amplitude/(2*pi*sigmax*sigmay) * exp(-(x-centerx)**2/(2*sigmax**2)
+                                             -(y-centery)**2/(2*sigmay**2))
+
+    """
+    z = amplitude*(gaussian(x, amplitude=1, center=centerx, sigma=sigmax) *
+                   gaussian(y, amplitude=1, center=centery, sigma=sigmay))
+    return z
 
 
 def lorentzian(x, amplitude=1.0, center=0.0, sigma=1.0):
@@ -48,21 +85,22 @@ def split_lorentzian(x, amplitude=1.0, center=0.0, sigma=1.0, sigma_r=1.0):
 
     Split means that width of the function is different between
     left and right slope of the function. The peak height is calculated
-    from the condition that the integral from ``-.inf`` to ``+.inf`` is equal
-    to ``amplitude``.
+    from the condition that the integral from ``-numpy.inf`` to
+    ``numpy.inf`` is equal to `amplitude`.
 
     split_lorentzian(x, amplitude, center, sigma, sigma_r) =
         [2*amplitude / (pi* (sigma + sigma_r)] *
          {  sigma**2   * (x<center)  / [sigma**2  + (x - center)**2]
           + sigma_r**2 * (x>=center) / [sigma_r**2+ (x - center)**2] }
+
     """
     s = max(tiny, sigma)
     r = max(tiny, sigma_r)
-    s2 = s*s
-    r2 = r*r
+    ss = s*s
+    rr = r*r
     xc2 = (x-center)**2
     amp = 2*amplitude/(pi*(s+r))
-    return amp*(s2*(x < center)/(s2+xc2) + r2*(x >= center)/(r2+xc2))
+    return amp*(ss*(x < center)/(ss+xc2) + rr*(x >= center)/(rr+xc2))
 
 
 def voigt(x, amplitude=1.0, center=0.0, sigma=1.0, gamma=None):
@@ -71,7 +109,7 @@ def voigt(x, amplitude=1.0, center=0.0, sigma=1.0, gamma=None):
     voigt(x, amplitude, center, sigma, gamma) =
         amplitude*wofz(z).real / (sigma*s2pi)
 
-    see https://en.wikipedia.org/wiki/Voigt_profile
+    For more information, see: https://en.wikipedia.org/wiki/Voigt_profile
 
     """
     if gamma is None:
@@ -84,15 +122,15 @@ def pvoigt(x, amplitude=1.0, center=0.0, sigma=1.0, fraction=0.5):
     """Return a 1-dimensional pseudo-Voigt function.
 
     pvoigt(x, amplitude, center, sigma, fraction) =
-       amplitude*(1-fraction)*gaussian(x, center, sigma_g) +
-       amplitude*fraction*lorentzian(x, center, sigma)
+        amplitude*(1-fraction)*gaussian(x, center, sigma_g) +
+        amplitude*fraction*lorentzian(x, center, sigma)
 
-    where sigma_g (the sigma for the Gaussian component) is
+    where `sigma_g` (the sigma for the Gaussian component) is
 
-        sigma_g = sigma / sqrt(2*log(2)) ~= sigma / 1.17741
+        ``sigma_g = sigma / sqrt(2*log(2)) ~= sigma / 1.17741``
 
-    so that the Gaussian and Lorentzian components have the
-    same FWHM of 2*sigma.
+    so that the Gaussian and Lorentzian components have the same FWHM of
+    ``2.0*sigma``.
 
     """
     sigma_g = sigma / sqrt(2*log2)
@@ -113,14 +151,15 @@ def moffat(x, amplitude=1, center=0., sigma=1, beta=1.):
 def pearson7(x, amplitude=1.0, center=0.0, sigma=1.0, expon=1.0):
     """Return a Pearson7 lineshape.
 
-    Using the wikipedia definition:
+    Using the Wikipedia definition:
+
     pearson7(x, center, sigma, expon) =
         amplitude*(1+arg**2)**(-expon)/(sigma*beta(expon-0.5, 0.5))
 
-    where arg = (x-center)/sigma
-    and beta() is the beta function.
+    where ``arg = (x-center)/sigma`` and `beta` is the beta function.
 
     """
+    expon = max(tiny, expon)
     arg = (x-center)/max(tiny, sigma)
     scale = amplitude * gamfcn(expon)/(gamfcn(0.5)*gamfcn(expon-0.5))
     return scale*(1+arg**2)**(-expon)/max(tiny, sigma)
@@ -152,13 +191,14 @@ def damped_oscillator(x, amplitude=1.0, center=1., sigma=0.1):
 def dho(x, amplitude=1., center=0., sigma=1., gamma=1.0):
     """Return a Damped Harmonic Oscillator.
 
-    Similar to version from PAN
+    Similar to the version from PAN:
+
     dho(x, amplitude, center, sigma, gamma) =
         amplitude*sigma*pi * (lm - lp) / (1.0 - exp(-x/gamma))
 
     where
-        lm(x, center, sigma) = 1.0 / ((x-center)**2 + sigma**2)
-        lp(x, center, sigma) = 1.0 / ((x+center)**2 + sigma**2)
+        ``lm(x, center, sigma) = 1.0 / ((x-center)**2 + sigma**2)``
+        ``lp(x, center, sigma) = 1.0 / ((x+center)**2 + sigma**2)``
 
     """
     bose = (1.0 - exp(-x/max(tiny, gamma)))
@@ -177,34 +217,34 @@ def logistic(x, amplitude=1., center=0., sigma=1.):
     """Return a Logistic lineshape (yet another sigmoidal curve).
 
     logistic(x, amplitude, center, sigma) =
-        = amplitude*(1.  - 1. / (1 + exp((x-center)/sigma)))
+        amplitude*(1. - 1. / (1 + exp((x-center)/sigma)))
 
     """
-    return amplitude*(1. - 1./(1. + exp((x-center)/sigma)))
+    return amplitude*(1. - 1./(1. + exp((x-center)/max(tiny, sigma))))
 
 
 def lognormal(x, amplitude=1.0, center=0., sigma=1):
     """Return a log-normal function.
 
-    lognormal(x, amplitude, center, sigma)
-        = (amplitude/(x*sigma*s2pi)) * exp(-(ln(x) - center)**2/ (2* sigma**2))
+    lognormal(x, amplitude, center, sigma) =
+        (amplitude/(x*sigma*s2pi)) * exp(-(ln(x) - center)**2/ (2* sigma**2))
 
     """
     if isinstance(x, (int, float)):
         x = max(tiny, x)
     else:
         x[where(x <= tiny)] = tiny
-    return ((amplitude/(x*max(tiny, sigma*s2pi))) * exp(-(log(x)-center)**2
-            / max(tiny, (2*sigma**2))))
+    return ((amplitude/(x*max(tiny, sigma*s2pi))) *
+            exp(-(log(x)-center)**2 / max(tiny, (2*sigma**2))))
 
 
 def students_t(x, amplitude=1.0, center=0.0, sigma=1.0):
-    """Return Student's t distribution.
+    """Return Student's t-distribution.
 
     students_t(x, amplitude, center, sigma) =
 
-        gamma((sigma+1)/2)   (1 + (x-center)**2/sigma)^(-(sigma+1)/2)
-        -------------------------
+             gamma((sigma+1)/2)
+        ---------------------------- * (1 + (x-center)**2/sigma)^(-(sigma+1)/2)
         sqrt(sigma*pi)gamma(sigma/2)
 
     """
@@ -214,12 +254,14 @@ def students_t(x, amplitude=1.0, center=0.0, sigma=1.0):
 
 
 def expgaussian(x, amplitude=1, center=0, sigma=1.0, gamma=1.0):
-    """Return a exponentially modified Gaussian.
+    """Return an exponentially modified Gaussian.
 
-    expgaussian(x, amplitude, center, sigma, gamma=)
-        = (gamma/2) exp[center*gamma + (gamma*sigma)**2/2 - gamma*x] *
-          erfc[(center + gamma*sigma**2 - x)/(sqrt(2)*sigma)]
+    expgaussian(x, amplitude, center, sigma, gamma) =
+        amplitude * (gamma/2) *
+        exp[center*gamma + (gamma*sigma)**2/2 - gamma*x] *
+        erfc[(center + gamma*sigma**2 - x)/(sqrt(2)*sigma)]
 
+    For more information, see:
     https://en.wikipedia.org/wiki/Exponentially_modified_Gaussian_distribution
 
     """
@@ -229,15 +271,16 @@ def expgaussian(x, amplitude=1, center=0, sigma=1.0, gamma=1.0):
     return amplitude*(gamma/2) * exp(arg1) * erfc(arg2)
 
 
-def donaich(x, amplitude=1.0, center=0, sigma=1.0, gamma=0.0):
-    """Return a Doniach Sunjic asymmetric lineshape, used for photo-emission.
+def doniach(x, amplitude=1.0, center=0, sigma=1.0, gamma=0.0):
+    """Return a Doniach Sunjic asymmetric lineshape.
 
-    donaich(x, amplitude, center, sigma, gamma) =
+    doniach(x, amplitude, center, sigma, gamma) =
         amplitude / sigma^(1-gamma) *
         cos(pi*gamma/2 + (1-gamma) arctan((x-center)/sigma) /
         (sigma**2 + (x-center)**2)**[(1-gamma)/2]
 
-    see http://www.casaxps.com/help_manual/line_shapes.htm
+    For example used in photo-emission; see
+    http://www.casaxps.com/help_manual/line_shapes.htm for more information.
 
     """
     arg = (x-center)/max(tiny, sigma)
@@ -246,17 +289,32 @@ def donaich(x, amplitude=1.0, center=0, sigma=1.0, gamma=0.0):
     return scale*cos(pi*gamma/2 + gm1*arctan(arg))/(1 + arg**2)**(gm1/2)
 
 
+def donaich(x, amplitude=1.0, center=0, sigma=1.0, gamma=0.0):
+    """Return a Doniach Sunjic asymmetric lineshape.
+
+    Function added here for backwards-compatibility, will emit a
+    `FutureWarning` when used.
+
+    """
+    msg = ('Please correct the name of your lineshape function: donaich --> '
+           'doniach. The incorrect spelling will be removed in a later '
+           'release.')
+    warnings.warn(FutureWarning(msg))
+    return doniach(x, amplitude, center, sigma, gamma)
+
+
 def skewed_gaussian(x, amplitude=1.0, center=0.0, sigma=1.0, gamma=0.0):
     """Return a Gaussian lineshape, skewed with error function.
 
     Equal to: gaussian(x, center, sigma)*(1+erf(beta*(x-center)))
 
-    with beta = gamma/(sigma*sqrt(2))
+    where ``beta = gamma/(sigma*sqrt(2))``
 
-    with  gamma < 0:  tail to low value of centroid
-          gamma > 0:  tail to high value of centroid
+    with ``gamma < 0``: tail to low value of centroid
+         ``gamma > 0``: tail to high value of centroid
 
-    see https://en.wikipedia.org/wiki/Skew_normal_distribution
+    For more information, see:
+    https://en.wikipedia.org/wiki/Skew_normal_distribution
 
     """
     asym = 1 + erf(gamma*(x-center)/max(tiny, (s2*sigma)))
@@ -266,15 +324,15 @@ def skewed_gaussian(x, amplitude=1.0, center=0.0, sigma=1.0, gamma=0.0):
 def skewed_voigt(x, amplitude=1.0, center=0.0, sigma=1.0, gamma=None, skew=0.0):
     """Return a Voigt lineshape, skewed with error function.
 
-    useful for ad-hoc Compton scatter profile
+    Equal to: voigt(x, center, sigma, gamma)*(1+erf(beta*(x-center)))
 
-    with beta = skew/(sigma*sqrt(2))
-    = voigt(x, center, sigma, gamma)*(1+erf(beta*(x-center)))
+    where ``beta = skew/(sigma*sqrt(2))``
 
-    skew < 0:  tail to low value of centroid
-    skew > 0:  tail to high value of centroid
+    with ``skew < 0``: tail to low value of centroid
+         ``skew > 0``: tail to high value of centroid
 
-    see https://en.wikipedia.org/wiki/Skew_normal_distribution
+    Useful, for example, for ad-hoc Compton scatter profile. For more
+    information, see: https://en.wikipedia.org/wiki/Skew_normal_distribution
 
     """
     beta = skew/max(tiny, (s2*sigma))
@@ -285,8 +343,8 @@ def skewed_voigt(x, amplitude=1.0, center=0.0, sigma=1.0, gamma=None, skew=0.0):
 def sine(x, amplitude=1.0, frequency=1.0, shift=0.0):
     """Return a sinusoidal function.
 
-    sine(x, amplitude, frequency, shift):
-       = amplitude * sin(x*frequency + shift)
+    sine(x, amplitude, frequency, shift) =
+        amplitude * sin(x*frequency + shift)
 
     """
     return amplitude*sin(x*frequency + shift)
@@ -295,37 +353,87 @@ def sine(x, amplitude=1.0, frequency=1.0, shift=0.0):
 def expsine(x, amplitude=1.0, frequency=1.0, shift=0.0, decay=0.0):
     """Return an exponentially decaying sinusoidal function.
 
-    expsine(x, amplitude, frequency, shift,  decay):
-       = amplitude * sin(x*frequency + shift) * exp(-x*decay)
+    expsine(x, amplitude, frequency, shift, decay) =
+        amplitude * sin(x*frequency + shift) * exp(-x*decay)
 
     """
     return amplitude*sin(x*frequency + shift) * exp(-x*decay)
 
 
+def thermal_distribution(x, amplitude=1.0, center=0.0, kt=1.0, form='bose'):
+    """Return a thermal distribution function.
+
+    The variable `form` defines the kind of distribution:
+
+    - ``form='bose'`` (default) is the Bose-Einstein distribution:
+
+        thermal_distribution(x, amplitude=1.0, center=0.0, kt=1.0) =
+            1/(amplitude*exp((x - center)/kt) - 1)
+
+    - ``form='maxwell'`` is the Maxwell-Boltzmann distribution:
+        thermal_distribution(x, amplitude=1.0, center=0.0, kt=1.0) =
+            1/(amplitude*exp((x - center)/kt))
+
+    - ``form='fermi'`` is the Fermi-Dirac distribution:
+        thermal_distribution(x, amplitude=1.0, center=0.0, kt=1.0) =
+            1/(amplitude*exp((x - center)/kt) + 1)
+
+    Notes
+    -----
+    - `kt` should be defined in the same units as `x`. The Boltzmann
+      constant is ``kB = 8.617e-5 eV/K``.
+    - set ``kt<0`` to implement the energy loss convention common in
+      scattering research.
+
+    For more information, see:
+    http://hyperphysics.phy-astr.gsu.edu/hbase/quantum/disfcn.html
+
+    """
+    form = form.lower()
+    if form.startswith('bose'):
+        offset = -1
+    elif form.startswith('maxwell'):
+        offset = 0
+    elif form.startswith('fermi'):
+        offset = 1
+    else:
+        msg = "Invalid value ('%s') for argument 'form'; should be one of %s."\
+              % (form, "'maxwell', 'fermi', or 'bose'")
+        raise ValueError(msg)
+
+    return real(1/(amplitude*exp((x - center)/not_zero(kt)) + offset + tiny*1j))
+
+
 def step(x, amplitude=1.0, center=0.0, sigma=1.0, form='linear'):
     """Return a step function.
 
-    starts at 0.0, ends at amplitude, with half-max at center, and
-    rising with form:
-      'linear' (default) = amplitude * min(1, max(0, arg))
-      'atan', 'arctan'   = amplitude * (0.5 + atan(arg)/pi)
-      'erf'              = amplitude * (1 + erf(arg))/2.0
-      'logistic'         = amplitude * [1 - 1/(1 + exp(arg))]
+    Starts at 0.0, ends at `amplitude`, with half-max at `center`, and
+    rising with `form`:
 
-    where arg = (x - center)/sigma
+    - `'linear'` (default) = amplitude * min(1, max(0, arg))
+    - `'atan'`, `'arctan'` = amplitude * (0.5 + atan(arg)/pi)
+    - `'erf'`              = amplitude * (1 + erf(arg))/2.0
+    - `'logistic'`         = amplitude * [1 - 1/(1 + exp(arg))]
+
+    where ``arg = (x - center)/sigma``.
 
     """
     out = (x - center)/max(tiny, sigma)
 
     if form == 'erf':
         out = 0.5*(1 + erf(out))
-    elif form.startswith('logi'):
+    elif form == 'logistic':
         out = (1. - 1./(1. + exp(out)))
     elif form in ('atan', 'arctan'):
         out = 0.5 + arctan(out)/pi
-    else:
+    elif form == 'linear':
         out[where(out < 0)] = 0.0
         out[where(out > 1)] = 1.0
+    else:
+        msg = "Invalid value ('%s') for argument 'form'; should be one of %s."\
+               % (form, "'erf', 'logistic', 'atan', 'arctan', or 'linear'")
+        raise ValueError(msg)
+
     return amplitude*out
 
 
@@ -333,16 +441,19 @@ def rectangle(x, amplitude=1.0, center1=0.0, sigma1=1.0,
               center2=1.0, sigma2=1.0, form='linear'):
     """Return a rectangle function: step up, step down.
 
-    (see step function)
-    starts at 0.0, rises to amplitude (at center1 with width sigma1)
-    then drops to 0.0 (at center2 with width sigma2) with form:
-      'linear' (default) = ramp_up + ramp_down
-      'atan', 'arctan'   = amplitude*(atan(arg1) + atan(arg2))/pi
-      'erf'              = amplitude*(erf(arg1) + erf(arg2))/2.
-      'logisitic'        = amplitude*[1 - 1/(1 + exp(arg1)) - 1/(1+exp(arg2))]
+    Starts at 0.0, rises to `amplitude` (at `center1` with width `sigma1`),
+    then drops to 0.0 (at `center2` with width `sigma2`) with `form`:
+    - `'linear'` (default) = ramp_up + ramp_down
+    - `'atan'`, `'arctan`' = amplitude*(atan(arg1) + atan(arg2))/pi
+    - `'erf'`              = amplitude*(erf(arg1) + erf(arg2))/2.
+    - `'logisitic'`        = amplitude*[1 - 1/(1 + exp(arg1)) - 1/(1+exp(arg2))]
 
-    where arg1 =  (x - center1)/sigma1
-    and   arg2 = -(x - center2)/sigma2
+    where ``arg1 = (x - center1)/sigma1`` and
+    ``arg2 = -(x - center2)/sigma2``.
+
+    See Also
+    --------
+    step
 
     """
     arg1 = (x - center1)/max(tiny, sigma1)
@@ -350,69 +461,38 @@ def rectangle(x, amplitude=1.0, center1=0.0, sigma1=1.0,
 
     if form == 'erf':
         out = 0.5*(erf(arg1) + erf(arg2))
-    elif form.startswith('logi'):
+    elif form == 'logistic':
         out = (1. - 1./(1. + exp(arg1)) - 1./(1. + exp(arg2)))
     elif form in ('atan', 'arctan'):
         out = (arctan(arg1) + arctan(arg2))/pi
-    else:
+    elif form == 'linear':
         arg1[where(arg1 < 0)] = 0.0
         arg1[where(arg1 > 1)] = 1.0
         arg2[where(arg2 > 0)] = 0.0
         arg2[where(arg2 < -1)] = -1.0
         out = arg1 + arg2
+    else:
+        msg = "Invalid value ('%s') for argument 'form'; should be one of %s."\
+               % (form, "'erf', 'logistic', 'atan', 'arctan', or 'linear'")
+        raise ValueError(msg)
+
     return amplitude*out
-
-
-def _erf(x):
-    """Return the error function.
-
-    erf = 2/sqrt(pi)*integral(exp(-t**2), t=[0, z])
-
-    """
-    return erf(x)
-
-
-def _erfc(x):
-    """Return the complementary error function.
-
-    erfc = 1 - erf(x)
-
-    """
-    return erfc(x)
-
-
-def _wofz(x):
-    """Return the fadeeva function for complex argument.
-
-    wofz = exp(-x**2)*erfc(-i*x)
-
-    """
-    return wofz(x)
-
-
-def _gamma(x):
-    """Return the gamma function."""
-    return gamfcn(x)
-
-
-def _gammaln(x):
-    """Return the log of absolute value of gamma function."""
-    return gammaln(x)
 
 
 def exponential(x, amplitude=1, decay=1):
     """Return an exponential function.
 
-    x -> amplitude * exp(-x/decay)
+    exponential(x, amplitude, decay) = amplitude * exp(-x/decay)
 
     """
+    decay = not_zero(decay)
     return amplitude * exp(-x/decay)
 
 
 def powerlaw(x, amplitude=1, exponent=1.0):
     """Return the powerlaw function.
 
-    x -> amplitude * x**exponent
+    powerlaw(x, amplitude, exponent) = amplitude * x**exponent
 
     """
     return amplitude * x**exponent
@@ -421,7 +501,7 @@ def powerlaw(x, amplitude=1, exponent=1.0):
 def linear(x, slope=1.0, intercept=0.0):
     """Return a linear function.
 
-    x -> slope * x + intercept
+    linear(x, slope, interceps) = slope * x + intercept
 
     """
     return slope * x + intercept
@@ -430,15 +510,7 @@ def linear(x, slope=1.0, intercept=0.0):
 def parabolic(x, a=0.0, b=0.0, c=0.0):
     """Return a parabolic function.
 
-    x -> a * x**2 + b * x + c
+    parabolic(x, a, b, c) = a * x**2 + b * x + c
 
     """
     return a * x**2 + b * x + c
-
-
-def assert_results_close(actual, desired, rtol=1e-03, atol=1e-03,
-                         err_msg='', verbose=True):
-    """Check whether all actual and desired parameter values are close."""
-    for param_name, value in desired.items():
-        assert_allclose(actual[param_name], value, rtol,
-                        atol, err_msg, verbose)
