@@ -8,11 +8,11 @@ dynamic = ["version"]
 dependencies = [
     "asteval>=1.0",
     "numpy>=1.19",
-    "scipy>=1.6",
+    "scipy>=1.14",
     "uncertainties>=3.2.2",
     "dill>=0.3.4",
 ]
-requires-python = ">= 3.8"
+requires-python = ">= 3.10"
 authors = [
     {name = "LMFit Development Team", email = "matt.newville@gmail.com"},
 ]
@@ -28,8 +28,6 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",

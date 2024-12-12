@@ -104,6 +104,7 @@ SCALAR_METHODS = {'nelder': 'Nelder-Mead',
                   'l-bfgsb': 'L-BFGS-B',
                   'tnc': 'TNC',
                   'cobyla': 'COBYLA',
+                  'cobyqa': 'COBYQA',
                   'slsqp': 'SLSQP',
                   'dogleg': 'dogleg',
                   'trust-ncg': 'trust-ncg',
@@ -862,6 +863,7 @@ class Minimizer:
             - `'CG'`
             - `'Newton-CG'`
             - `'COBYLA'`
+            - `'COBYQA'`
             - `'BFGS'`
             - `'TNC'`
             - `'trust-ncg'`
@@ -915,7 +917,7 @@ class Minimizer:
         if method == 'L-BFGS-B':
             fmin_kws['options']['maxfun'] = 2*self.max_nfev
 
-        elif method == 'COBYLA':
+        elif method in ['COBYLA', 'COBYQA']:
             # for this method, we explicitly let the solver reach
             # the users max nfev, and do not abort in _residual
             fmin_kws['options']['maxiter'] = self.max_nfev
